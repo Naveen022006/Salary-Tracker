@@ -57,6 +57,9 @@ interface TxnDao {
     @Query("SELECT * FROM txn WHERE merchant = :merchant COLLATE NOCASE")
     suspend fun findByMerchant(merchant: String): List<TxnEntity>
 
+    @Query("SELECT * FROM txn WHERE timestamp >= :since AND merchant IS NOT NULL")
+    suspend fun findSinceWithMerchant(since: Long): List<TxnEntity>
+
     @Query("DELETE FROM txn")
     suspend fun deleteAll()
 }

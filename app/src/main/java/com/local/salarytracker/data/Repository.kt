@@ -5,6 +5,7 @@ import com.local.salarytracker.model.TxnSource
 import com.local.salarytracker.model.TxnType
 import com.local.salarytracker.parse.Categorizer
 import com.local.salarytracker.parse.Dedupe
+import com.local.salarytracker.parse.MerchantPick
 import com.local.salarytracker.parse.ParsedTxn
 import com.local.salarytracker.parse.TxnKey
 import kotlinx.coroutines.flow.Flow
@@ -60,7 +61,10 @@ class Repository(private val db: AppDatabase) {
         require(source != TxnSource.MANUAL) { "use addManual" }
         val ts = parsed.timestampHint ?: timestamp
         val category = if (parsed.excluded) Category.TRANSFER
-        else Categorizer.categorize(parsed.merchant, rawText, learnedRules())
+        else Categorizer.categorize(parsed.merchant, rawText, learnedRules(), parsed.viaGateway).let {
+            // Catalog app hint (e.g. a food app) only fills in when the keywords found nothing.
+            if (it == Category.OTHER && parsed.categoryHint != null) parsed.categoryHint else it
+        }
 
         // --- dedupe against existing rows
         val candidates = txns.findCandidates(
@@ -69,10 +73,12 @@ class Repository(private val db: AppDatabase) {
         val newKey = TxnKey(parsed.amountPaise, parsed.type, ts, parsed.upiRef, source)
         val dup = candidates.firstOrNull { Dedupe.isDuplicate(newKey, it.toKey()) }
         if (dup != null) {
-            val betterMerchant = preferMerchant(dup.merchant, parsed.merchant)
+            val betterMerchant = MerchantPick.better(dup.merchant, parsed.merchant)
             val enriched = dup.copy(
                 merchant = betterMerchant,
-                category = if (betterMerchant != dup.merchant && dup.source != TxnSource.MANUAL && !dup.excluded) category else dup.category,
+                category = if (dup.source != TxnSource.MANUAL && !dup.excluded &&
+                    (betterMerchant != dup.merchant || (dup.category == Category.OTHER && category != Category.OTHER))
+                ) category else dup.category,
                 accountLast4 = dup.accountLast4 ?: parsed.accountLast4,
                 upiRef = dup.upiRef ?: parsed.upiRef,
                 // SMS is the authoritative source for amount/time
@@ -101,17 +107,6 @@ class Repository(private val db: AppDatabase) {
         return entity.copy(id = id)
     }
 
-    /** Longer/cleaner merchant wins; a bare phone number never beats a name. */
-    private fun preferMerchant(old: String?, new: String?): String? {
-        if (new.isNullOrBlank()) return old
-        if (old.isNullOrBlank()) return new
-        val oldPhone = old.all { it.isDigit() }
-        val newPhone = new.all { it.isDigit() }
-        if (oldPhone && !newPhone) return new
-        if (newPhone && !oldPhone) return old
-        return if (new.length > old.length) new else old
-    }
-
     suspend fun addManual(amountPaise: Long, category: Category, note: String?, timestamp: Long): TxnEntity {
         val e = TxnEntity(
             amountPaise = amountPaise,
@@ -131,6 +126,15 @@ class Repository(private val db: AppDatabase) {
     /** Puts a deleted txn back with its old id (used by the Undo button). */
     suspend fun restoreTxn(txn: TxnEntity) {
         txns.insert(txn)
+    }
+    /** Test hook: deletes one txn by id; returns the number deleted (0 or 1). */
+    suspend fun deleteTxnById(id: Long): Int = txns.getById(id)?.let { txns.delete(it); 1 } ?: 0
+
+    /** Test hook: deletes txns with timestamp >= [sinceMillis] whose merchant starts with [prefix] (case-insensitive). */
+    suspend fun deleteByMerchantPrefix(prefix: String, sinceMillis: Long): Int {
+        val hits = txns.findSinceWithMerchant(sinceMillis).filter { it.merchant!!.startsWith(prefix, ignoreCase = true) }
+        hits.forEach { txns.delete(it) }
+        return hits.size
     }
     suspend fun deleteAllTxns() = txns.deleteAll()
 

@@ -288,7 +288,7 @@ private fun FlowRowLegend(showAllowance: Boolean) {
         if (showAllowance) {
             LegendDot(AppColors.current.danger, "Over allowance")
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("- - ", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                Text("- - ", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = AppColors.current.accent)
                 Text("Allowance", style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -405,7 +405,8 @@ private fun Pill(text: String, tint: Color, withCheck: Boolean) {
                 Icon(Icons.Filled.Check, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
             }
-            Text(text, style = MaterialTheme.typography.labelMedium, color = tint)
+            val textTint = if (AppColors.current.isDark) tint else androidx.compose.ui.graphics.lerp(tint, MaterialTheme.colorScheme.onSurface, 0.4f)
+            Text(text, style = MaterialTheme.typography.labelMedium, color = textTint)
         }
     }
 }

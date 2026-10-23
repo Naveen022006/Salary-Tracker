@@ -207,11 +207,11 @@ fun PayDayDialog(initial: Int, onDismiss: () -> Unit, onSave: (Int) -> Unit) {
 /** Small card: "Your month: 1 Oct – 31 Oct". */
 @Composable
 fun PayMonthCard(payDay: Int, modifier: Modifier = Modifier) {
-    Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+    Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.Icon(Icons.Filled.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+            androidx.compose.material3.Icon(Icons.Filled.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
             Spacer(Modifier.padding(start = 12.dp))
-            Text(payPeriodText(payDay), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            Text(payPeriodText(payDay), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
         }
     }
 }

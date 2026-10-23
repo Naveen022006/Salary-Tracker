@@ -274,8 +274,12 @@ private fun StepTitle(title: String, helper: String? = null) {
 private fun WelcomeStep() {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Spacer(Modifier.height(8.dp))
-        Box(Modifier.size(96.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
-            Text("₹", fontSize = 52.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+        val hero = com.local.salarytracker.ui.theme.AppColors.current
+        Box(
+            Modifier.size(96.dp).clip(CircleShape).background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(hero.heroStart, hero.heroEnd))),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("₹", fontSize = 52.sp, fontWeight = FontWeight.Bold, color = hero.heroAccent)
         }
         Text(
             "Know what you can spend today",

@@ -23,6 +23,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import com.local.salarytracker.ui.theme.AppColors
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -96,13 +100,25 @@ private fun MainScreen(vm: AppViewModel) {
         contentWindowInsets = WindowInsets(0),
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            NavigationBar {
+            val outlineV = MaterialTheme.colorScheme.outlineVariant
+            NavigationBar(
+                modifier = Modifier.drawBehind { drawLine(outlineV, Offset(0f, 0f), Offset(size.width, 0f), strokeWidth = 1.dp.toPx()) },
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                tonalElevation = 0.dp,
+            ) {
                 tabs.forEachIndexed { i, t ->
                     NavigationBarItem(
                         selected = tab == i,
                         onClick = { tab = i },
                         icon = { Icon(if (tab == i) t.selectedIcon else t.icon, contentDescription = null) },
                         label = { Text(t.label) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
                     )
                 }
             }
@@ -114,6 +130,10 @@ private fun MainScreen(vm: AppViewModel) {
                     expanded = fabExpanded,
                     icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                     text = { Text("Add cash") },
+                    // Saffron: pale container in light theme, the bright saffron itself in dark so it pops.
+                    // Solid saffron in both themes; the pale container washed out on the light background.
+                    containerColor = if (AppColors.current.isDark) MaterialTheme.colorScheme.secondary else AppColors.current.heroAccent,
+                    contentColor = if (AppColors.current.isDark) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSecondaryContainer,
                 )
             }
         },

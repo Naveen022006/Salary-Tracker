@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -79,11 +80,13 @@ fun InfoBanner(
     val colors = AppColors.current
     val (container, content) = when (tone) {
         BannerTone.Info -> MaterialTheme.colorScheme.surfaceContainerHigh to MaterialTheme.colorScheme.onSurfaceVariant
-        BannerTone.Positive -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
-        BannerTone.Warning -> colors.warning.copy(alpha = 0.16f) to MaterialTheme.colorScheme.onSurface
-        BannerTone.Danger -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+        BannerTone.Positive -> colors.positive.copy(alpha = 0.12f) to MaterialTheme.colorScheme.onSurface
+        BannerTone.Warning -> colors.warning.copy(alpha = 0.12f) to MaterialTheme.colorScheme.onSurface
+        BannerTone.Danger -> colors.danger.copy(alpha = 0.12f) to MaterialTheme.colorScheme.onSurface
     }
+    // Icons carry the tone colour; body text stays onSurface so it keeps 4.5:1 contrast on the tint.
     val iconTint = when (tone) {
+        BannerTone.Positive -> colors.positive
         BannerTone.Warning -> colors.warning
         BannerTone.Danger -> colors.danger
         else -> content
@@ -99,7 +102,7 @@ fun InfoBanner(
     }
 }
 
-/** Small pill: green "Allowed" with a tick when [ok], amber "Needs permission" when not. Labels can be changed. */
+/** Small pill: teal "Allowed" with a tick when [ok], amber "Needs permission" when not. Labels can be changed. */
 @Composable
 fun StatusChip(
     ok: Boolean,
@@ -109,11 +112,13 @@ fun StatusChip(
 ) {
     val colors = AppColors.current
     val tint = if (ok) colors.positive else colors.warning
+    // Light theme: darken the label a little so 12sp text keeps 4.5:1 on the tint.
+    val textTint = if (colors.isDark) tint else lerp(tint, MaterialTheme.colorScheme.onSurface, 0.4f)
     Surface(modifier, shape = RoundedCornerShape(12.dp), color = tint.copy(alpha = 0.14f)) {
         Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(if (ok) Icons.Filled.Check else Icons.Filled.ErrorOutline, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(4.dp))
-            Text(if (ok) okLabel else neededLabel, style = MaterialTheme.typography.labelMedium, color = tint, fontWeight = FontWeight.Medium)
+            Text(if (ok) okLabel else neededLabel, style = MaterialTheme.typography.labelMedium, color = textTint, fontWeight = FontWeight.Medium)
         }
     }
 }

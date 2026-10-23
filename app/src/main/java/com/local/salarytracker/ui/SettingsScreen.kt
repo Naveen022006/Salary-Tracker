@@ -280,6 +280,11 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
                             selected = theme == m,
                             onClick = { vm.setThemeMode(m) },
                             shape = SegmentedButtonDefaults.itemShape(i, modes.size),
+                            // Selection is indigo everywhere (nav, chips); the default here was saffron.
+                            colors = SegmentedButtonDefaults.colors(
+                                activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            ),
                         ) { Text(name) }
                     }
                 }

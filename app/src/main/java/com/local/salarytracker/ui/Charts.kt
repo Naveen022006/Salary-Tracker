@@ -115,7 +115,7 @@ fun DailyBarChart(
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
     val barColor = MaterialTheme.colorScheme.primary
     val overColor = AppColors.current.danger
-    val lineColor = MaterialTheme.colorScheme.onSurface
+    val lineColor = AppColors.current.accent
     val grid = MaterialTheme.colorScheme.outlineVariant
     val highlight = MaterialTheme.colorScheme.surfaceContainer
     val tipBg = MaterialTheme.colorScheme.inverseSurface

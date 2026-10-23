@@ -8,6 +8,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
@@ -36,6 +37,11 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -148,8 +154,10 @@ fun TodayScreen(vm: AppViewModel, padding: PaddingValues, listState: LazyListSta
         if (state.tip.isNotEmpty()) {
             item(key = "tip") {
                 Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.Top) {
-                    Icon(Icons.Outlined.Lightbulb, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
+                    Box(Modifier.size(28.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Outlined.Lightbulb, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(18.dp))
+                    }
+                    Spacer(Modifier.width(10.dp))
                     Text(state.tip, style = MaterialTheme.typography.bodyMedium)
                 }
             }
@@ -219,12 +227,12 @@ fun TodayScreen(vm: AppViewModel, padding: PaddingValues, listState: LazyListSta
 @Composable
 private fun HeroCard(gauge: Gauge, progress: Float, left: Long, allowance: Long, spent: Long, modifier: Modifier) {
     val colors = AppColors.current
+    val onCard = colors.onHero
     val ringColor = when (gauge) {
-        Gauge.Ok -> MaterialTheme.colorScheme.primary
-        Gauge.Warn -> colors.warning
-        Gauge.Over -> colors.danger
+        Gauge.Ok -> onCard
+        Gauge.Warn -> colors.heroAccent
+        Gauge.Over -> colors.heroOver
     }
-    val onCard = MaterialTheme.colorScheme.onPrimaryContainer
     val animated by animateFloatAsState(progress, rememberAppTween(600), label = "ring")
     val fontScale = LocalDensity.current.fontScale.coerceIn(1f, 1.3f)
     val ringSize = (160 * fontScale).dp
@@ -238,12 +246,12 @@ private fun HeroCard(gauge: Gauge, progress: Float, left: Long, allowance: Long,
         else -> 24.sp
     }
     SectionCard(
-        modifier,
-        containerColor = MaterialTheme.colorScheme.primaryContainer,
+        modifier.clip(RoundedCornerShape(20.dp)).background(Brush.linearGradient(listOf(colors.heroStart, colors.heroEnd))),
+        containerColor = Color.Transparent,
         contentColor = onCard,
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
     ) {
-        val trackColor = onCard.copy(alpha = 0.14f)
+        val trackColor = onCard.copy(alpha = 0.18f)
         val description = if (over) "${Money.formatWhole(-left)} over today" else "${Money.formatWhole(left)} left today"
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Box(Modifier.size(ringSize).semantics(mergeDescendants = true) { contentDescription = description }, contentAlignment = Alignment.Center) {
@@ -267,7 +275,7 @@ private fun HeroCard(gauge: Gauge, progress: Float, left: Long, allowance: Long,
                     Text(
                         if (over) "over today" else "left today",
                         style = MaterialTheme.typography.labelMedium,
-                        color = if (gauge == Gauge.Ok) onCard.copy(alpha = 0.8f) else ringColor,
+                        color = if (gauge == Gauge.Ok) onCard.copy(alpha = 0.75f) else ringColor,
                     )
                 }
             }
@@ -278,6 +286,7 @@ private fun HeroCard(gauge: Gauge, progress: Float, left: Long, allowance: Long,
             modifier = Modifier.fillMaxWidth(),
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodyLarge.copy(fontFeatureSettings = "tnum"),
+            color = onCard.copy(alpha = 0.85f),
         )
     }
 }
@@ -288,22 +297,20 @@ private fun Last7DaysChart(bars: List<DayBar>, allowancePaise: Long) {
     if (bars.isEmpty()) return
     val measurer = rememberTextMeasurer()
     val primary = MaterialTheme.colorScheme.primary
-    val barColor = primary.copy(alpha = 0.35f)
+    val barColor = primary.copy(alpha = 0.55f)
     val stub = MaterialTheme.colorScheme.outlineVariant
-    val lineColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val lineColor = AppColors.current.accent
     val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
     val density = LocalDensity.current
     val labelStyle = TextStyle(fontSize = 12.sp, color = labelColor)
-    val todayStyle = TextStyle(fontSize = 12.sp, color = primary, fontWeight = FontWeight.Bold)
+    val todayStyle = TextStyle(fontSize = 12.sp, color = AppColors.current.accent, fontWeight = FontWeight.Bold)
     val valueStyleBase = TextStyle(fontSize = 11.sp, color = primary, fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum")
     val valueStyle = valueStyleBase
     val today = bars.last()
     val appColors = AppColors.current
     val todayColor = when {
-        allowancePaise <= 0L -> primary
-        today.spendPaise > allowancePaise -> appColors.danger
-        today.spendPaise >= allowancePaise * 0.8 -> appColors.warning
-        else -> primary
+        allowancePaise > 0L && today.spendPaise > allowancePaise -> appColors.danger
+        else -> appColors.accent
     }
     val disabledLabel = labelColor.copy(alpha = 0.4f)
     val description = "Spending in the last 7 days. Today ${Money.formatWhole(today.spendPaise)}." +

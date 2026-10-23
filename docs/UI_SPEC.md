@@ -6,15 +6,9 @@ Works offline; no network fonts or images (bundle nothing that needs a download)
 
 ## 1. Design system (`ui/theme/`, `ui/components/`)
 
-**Colour** (no dynamic colour — keep the brand stable; the user's wallpaper is purple):
-- Brand primary: emerald. Light `#0B8A5A` on white, dark `#5FD4A0` on dark.
-- Light: background `#F5F7F6`, cards (surfaceContainerLow) `#FFFFFF`, surfaceContainer `#EEF2F0`,
-  outlineVariant `#DCE3DF`, text `#17201B` / secondary `#5B6660`.
-- Dark: background `#0D1210`, cards `#161C19`, surfaceContainer `#1E2521`, outlineVariant `#2C3530`,
-  text `#E6ECE8` / secondary `#9AA69F`.
-- Semantic: positive = primary, warning amber (`#B26A00` light / `#FFB74D` dark), danger red
-  (`#C62828` / `#FF8A80`), credit green. Use warning when ≥ 80% of today's allowance is used, danger when over.
-- Category colours: keep `Category.color`, used as icon tint on a 12%-alpha circle of the same colour.
+- Colours: see **docs/COLOR_SPEC.md** ("Ink & Saffron": indigo brand, saffron accent, teal positive/credit, slate neutrals,
+  gradient hero card, 16 %/22 % category icon circles). It replaces the old emerald palette. Use warning when ≥ 80 % of
+  today's allowance is used, danger when over.
 
 **Type:** Roboto (system). Money uses tabular figures (`fontFeatureSettings = "tnum"`) everywhere.
 Scale: hero money 44sp bold; card money 24sp semibold; titles 20sp semibold; body 16sp; labels 13sp

@@ -33,6 +33,8 @@ The app asks you, step by step:
    - **Notification access**: reads payment alerts from apps like Swiggy, Amazon, Samsung Wallet,
      GPay or PhonePe. If Android says it is *restricted*, open **Settings → Apps → Salary Tracker →
      ⋮ (top right) → Allow restricted settings**, then try again.
+     "Smart mode" (on by default, switch in Settings → Apps to watch) also checks alerts from other apps, but only
+     for completed payments; chat and social apps are always skipped, and nothing leaves the phone.
    - **Notifications**: for the evening reminder and the "new expense" alerts.
 5. **Import old SMS**: picks up your past bank messages (3, 6 or 12 months, or all).
 

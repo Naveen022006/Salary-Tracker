@@ -15,13 +15,13 @@ WorkManager merges WAKE_LOCK, ACCESS_NETWORK_STATE, RECEIVE_BOOT_COMPLETED, FORE
 - `Category(displayName, emoji, color: Long ARGB, isFixed)`: FOOD GROCERIES TRAVEL BILLS(fixed) RENT_EMI(fixed) SHOPPING HEALTH ENTERTAINMENT EDUCATION PEOPLE CASH TRANSFER OTHER; `Category.fromName(String?)`.
 
 ## parse/
-- `ParsedTxn(amountPaise, type, merchant?, accountLast4?, upiRef?, excluded, isSalary, timestampHint=null)` (timestampHint is never set yet; use the SMS/notification time).
+- `ParsedTxn(viaGateway: Boolean = false` (payee routed via RAZORPAY*/rzp/PAYU*/CASHFREE*/BHARATPE*/P2M etc: always a business; `Categorizer.categorize(..., viaGateway)` never returns PEOPLE for it). `ParsedTxn(amountPaise, type, merchant?, accountLast4?, upiRef?, excluded, isSalary, timestampHint=null)` (timestampHint is never set yet; use the SMS/notification time).
 - `SmsParser.parse(sender, body): ParsedTxn?`, `SmsParser.isBankSender(sender)`. Phone-number / non DLT senders -> null.
 - `NotificationParser.parse(pkg, title, text): ParsedTxn?` (SMS-app packages ignored; shopping/food apps force merchant = app name).
 - `DEFAULT_ALLOWED_PACKAGES: List<String>`, `SMS_APP_PACKAGES: Set<String>`.
 - `Categorizer.categorize(merchant, text, learnedRules: Map<keywordLowercase, Category>): Category`.
 - `Dedupe.isDuplicate(TxnKey, TxnKey)`, `Dedupe.WINDOW_MS`, `Dedupe.bodyHash(source, sender, body, timestamp)`; `TxnEntity.toKey()`.
-  Rule: MANUAL never merges; both refs present -> equal refs; else only different sources (SMS vs NOTIFICATION), same amount, within 10 min.
+  Rule: MANUAL never merges; both refs present -> equal refs; else same amount (and type) within 10 min when SMS<->NOTIFICATION or NOTIFICATION<->NOTIFICATION (any package, same or different); SMS<->SMS without a shared ref stay separate. See "Payment app catalog" below.
 - `ParserCore` is internal (shared engine).
 
 ## data/
@@ -81,9 +81,11 @@ adb shell "am broadcast -n com.local.salarytracker/.capture.TestReceiver -a com.
 adb shell "am broadcast -n com.local.salarytracker/.capture.TestReceiver -a com.local.salarytracker.TEST_SMS --es sender VM-HDFCBK --el time 1779000000000 --es body 'Rs.99.00 debited from A/c XX1234 to VPA zomato@axis. UPI Ref 223456789012'"
 adb shell "am broadcast -n com.local.salarytracker/.capture.TestReceiver -a com.local.salarytracker.TEST_NOTIF --es pkg com.phonepe.app --es title 'Paid Rs 120' --es text 'Paid Rs 120 to Chai Point'"
 adb shell "am broadcast -n com.local.salarytracker/.capture.TestReceiver -a com.local.salarytracker.TEST_REMINDER"
+adb shell "am broadcast -n com.local.salarytracker/.capture.TestReceiver -a com.local.salarytracker.TEST_DELETE --el id 42"
+adb shell "am broadcast -n com.local.salarytracker/.capture.TestReceiver -a com.local.salarytracker.TEST_DELETE --es merchantPrefix Test --el sinceMillis 1779000000000"
 adb logcat -s SalaryTracker
 ```
-(`--el time` = epoch millis, optional; default now.) In Git Bash prefix with `MSYS_NO_PATHCONV=1`. The notification test only works for packages in the "Apps to watch" list. `TEST_REMINDER` runs the real `ReminderWorker` once and posts the reminder notification. A successful save logs `saved #id DEBIT ₹250 merchant=... category=...`; otherwise the log says why it was ignored.
+(`--el time` = epoch millis, optional; default now.) In Git Bash prefix with `MSYS_NO_PATHCONV=1`. The notification test only works for packages in the "Apps to watch" list. `TEST_REMINDER` runs the real `ReminderWorker` once and posts the reminder notification. `TEST_DELETE` deletes one txn by `--el id`, or all txns with timestamp >= `--el sinceMillis` whose merchant starts with `--es merchantPrefix` (case-insensitive); logs `TEST_DELETE: deleted N` to tag SalaryTracker. A successful save logs `saved #id DEBIT ₹250 merchant=... category=...`; otherwise the log says why it was ignored.
 
 ---
 
@@ -141,3 +143,16 @@ Spec: `docs/UI_SPEC.md`. History / Report / Settings / Onboarding still have the
 - **Settings**: grouped `SectionCard`s of `SettingRow`s. Full-screen pages (Dialog) for Apps to watch (search, icons, checkboxes) and Learned categories; `ImportSheet` (ModalBottomSheet) uses `ImportPanel` from `Pickers.kt` (range cards, progress, result). New shared dialogs in `Pickers.kt`: `AppDialog`, `AmountField`, `MoneyDialog`, `PayDayDialog`, `PayMonthCard`, `PayDayPicker(columns)`. Theme uses `vm.setThemeMode`.
 - **Onboarding**: 7 segmented progress bar + back arrow, sticky bottom button (+ Skip on Permissions / Import), content max 480dp. `PermissionCard` replaces `PermRow` in `Permissions.kt`. Behaviour unchanged (settings saved at Savings step, reminder time at Permissions step, trackingStart + lastSmsScanTime on finish).
 - Part-1 fixes done here: hero ring shows remaining share (amber < 20% left, red when over), tip wording "under budget so far", Last-7 chart today colour / label placement / untracked days, `Category.ENTERTAINMENT.displayName` = "Movies & fun", Undo snackbar stays 8 s.
+
+---
+
+# Payment app catalog, smart mode, cross-app dedupe
+
+- **`parse/PaymentApps.kt`**: `PaymentApp(pkg, name, kind: AppKind, defaultCategory?, isMerchantSide, merchantName)`; `AppKind {UPI, WALLET, BANK, CARD, SHOPPING, FOOD, GROCERY, TRAVEL, ENTERTAINMENT, BILLS, GATEWAY}` (each has a `label` for Settings); `PaymentApps.ALL`, `byPackage(pkg)`. `DEFAULT_ALLOWED_PACKAGES` = every catalog package. Shopping / food / grocery / travel / entertainment / bills apps are themselves the merchant (`merchantName` is used, e.g. "Swiggy", "Airtel"); UPI / wallet / bank / gateway apps keep the parsed payee. `defaultCategory` travels in `ParsedTxn.categoryHint` and `Repository.addCaptured` uses it only when the categorizer returns OTHER. Gateway apps (`isMerchantSide`) show money RECEIVED: "paid by X" is turned into a CREDIT.
+- **Catalog migration**: `App.onCreate` merges catalog apps that were not in the old 24-app default list into an existing install's watch list once (`Prefs.catalogMigrated`); apps the user had unticked stay unticked.
+- **Smart mode** (`Prefs.smartDetect`, default ON; `parse/SmartDetect.kt`, `NotificationParser.parseSmart`): `Capture.notification` first checks the watch list. A package in the watch list uses the normal parser. A catalog package that is not ticked is ignored. Any other package is accepted only if smart mode is on, it is not own app / SMS app / `SmartDetect.BLOCKED_PACKAGES` (WhatsApp, Telegram, Instagram, Facebook, Snapchat, X, LinkedIn, Gmail, Outlook, Truecaller, Discord, Messages, system packages) / an app with `ApplicationInfo.CATEGORY_SOCIAL` (checked in Capture), and the text has a rupee amount (₹/Rs/INR) AND a completed-payment phrase (paid, debited, payment ... successful, sent ₹, money sent, spent, purchase of, order placed ... paid, autopay/auto-debit ... successful) AND `ParserCore` accepts it (no promo / future / failed / request / OTP) AND the result is a DEBIT. Third-person text ("Ramesh paid ₹500", "paid you", owes / split / settle) is rejected. The entry keeps `sender` = package; `EntryRow` shows "App alert · <app label>" (`ui/AppLabels`: catalog name, else the installed app label).
+- **TestReceiver TEST_NOTIF** uses the same `Capture.notification` path, so any package works when smart mode is on (e.g. `--es pkg com.example.shop --es text 'You paid Rs 250 to Cafe One'`).
+- **Parser additions** (`ParserCore`, `MerchantCleaner`): gateway noise is stripped from payee names and VPAs for SMS and notifications ("RAZORPAY*SWIGGY" -> Swiggy, "swiggy.rzp@icici" -> Swiggy, "BHARATPE*RAMESH TEA STALL" -> Ramesh Tea Stall; Paytm QR ids and gateway+number VPAs give no merchant; a bare gateway name such as "Razorpay Software" is kept but ranked as a gateway name). New FUTURE/skip rules: "request of", "Pay ₹X ...", "Add ₹X ...", "to complete your order", "refund ... initiated/in progress", "flat ₹ off"; notification-only: "pending/processing", "order ... confirmed" counts as a payment, "₹X added to your wallet" is an excluded CREDIT (cashback/reward wording -> ignored), "charged" is a debit word. STOP words gained successful/successfully/completed/confirmed.
+- **Dedupe rules** (`Dedupe.isDuplicate`): MANUAL never merges; both upiRef present -> equal refs; else same type + amount within 10 min when SMS<->NOTIFICATION or NOTIFICATION<->NOTIFICATION (different packages, or the same package's status updates); SMS<->SMS without shared ref stay separate. On merge `MerchantPick.better` keeps the best merchant (real shop/person > VPA/phone number > gateway name > none; ties keep the longer) and the category is upgraded when the merchant improved or the old one was OTHER.
+- **Settings > Apps to watch**: top switch "Find payments in all apps (smart)"; section "Payment apps on this phone" (installed catalog apps with icon, kind label, checkbox, default on); collapsed "Other apps". Settings row value: "Smart mode on · N payment apps" (N = installed and ticked catalog apps).
+- Tests: `PaymentAppsTest` (94: catalog, notification phrasings, must-be-null cases, gateway cleanup, smart rule, dedupe, merchant pick) + 2 new `DedupeTest` cases.

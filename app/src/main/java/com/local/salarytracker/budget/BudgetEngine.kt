@@ -67,7 +67,7 @@ data class BudgetSnapshot(
 )
 
 data class CategoryTotal(val category: Category, val amountPaise: Long)
-data class MerchantTotal(val merchant: String, val amountPaise: Long, val count: Int)
+data class MerchantTotal(val merchant: String, val amountPaise: Long, val count: Int, val category: Category? = null)
 data class DailyPoint(val date: LocalDate, val dailySpendPaise: Long, val fixedSpendPaise: Long, val allowancePaise: Long)
 
 data class PeriodReport(
@@ -219,7 +219,7 @@ object BudgetEngine {
         }
         val merchants = spend.filter { !it.merchant.isNullOrBlank() }
             .groupBy { it.merchant!!.trim().lowercase() }
-            .map { (_, l) -> MerchantTotal(l.first().merchant!!.trim(), l.sumOf { it.amountPaise }, l.size) }
+            .map { (_, l) -> MerchantTotal(l.first().merchant!!.trim(), l.sumOf { it.amountPaise }, l.size, l.groupBy { it.category }.maxByOrNull { c -> c.value.sumOf { it.amountPaise } }?.key) }
             .sortedByDescending { it.amountPaise }
             .take(5)
         if (beforeAll) {

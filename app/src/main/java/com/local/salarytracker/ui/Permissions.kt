@@ -1,5 +1,18 @@
 package com.local.salarytracker.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import com.local.salarytracker.ui.components.SectionCard
+import com.local.salarytracker.ui.components.StatusChip
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -88,19 +101,32 @@ fun rememberPermActions(holder: PermHolder): PermActions {
     }
 }
 
+/** Onboarding card: icon, title, why, then a status chip (allowed) or an "Allow" button. [extra] goes at the bottom. */
 @Composable
-fun PermRow(title: String, why: String, granted: Boolean, buttonLabel: String, onClick: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+fun PermissionCard(
+    icon: ImageVector,
+    title: String,
+    why: String,
+    granted: Boolean,
+    buttonLabel: String,
+    onAllow: () -> Unit,
+    extra: (@Composable ColumnScope.() -> Unit)? = null,
+) {
+    SectionCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+            Spacer(Modifier.width(12.dp))
             Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            if (granted) Text("✓ On", color = creditColor(), style = MaterialTheme.typography.titleMedium)
+            if (granted) StatusChip(ok = true)
         }
-        Text(why, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(why, modifier = Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (!granted) {
-            Button(onClick = onClick, modifier = Modifier.fillMaxWidth()) { Text(buttonLabel) }
-        } else {
-            OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) { Text("Open settings") }
+            FilledTonalButton(onClick = onAllow, modifier = Modifier.padding(top = 12.dp).fillMaxWidth()) { Text(buttonLabel) }
         }
+        if (extra != null) extra()
     }
 }
 

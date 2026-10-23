@@ -67,6 +67,8 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -94,6 +96,7 @@ import com.local.salarytracker.Prefs
 import com.local.salarytracker.data.SettingsEntity
 import com.local.salarytracker.model.ThemeMode
 import com.local.salarytracker.parse.DEFAULT_ALLOWED_PACKAGES
+import com.local.salarytracker.parse.PaymentApps
 import com.local.salarytracker.parse.SMS_APP_PACKAGES
 import com.local.salarytracker.ui.components.CategoryIcon
 import com.local.salarytracker.ui.components.SectionCard
@@ -163,6 +166,7 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
     val actions = rememberPermActions(perm)
     var reminderOn by remember { mutableStateOf(Prefs.reminderEnabled(ctx)) }
     var dialog by rememberSaveable { mutableStateOf<String?>(null) }
+    var smart by remember { mutableStateOf(Prefs.smartDetect(ctx)) }
 
     LazyColumn(
         contentPadding = PaddingValues(
@@ -248,7 +252,10 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
                     )
                 }
                 Divider()
-                SettingRow(Icons.Filled.Apps, "Apps to watch", value = installedPkgs?.let { inst -> "${s.allowedPackageSet.count { it in inst }} apps selected" }, onClick = { dialog = "apps" })
+                SettingRow(Icons.Filled.Apps, "Apps to watch", value = installedPkgs?.let { inst ->
+                    val n = s.allowedPackageSet.count { it in inst && PaymentApps.byPackage(it) != null }
+                    "Smart mode ${if (smart) "on" else "off"} · $n payment app${if (n == 1) "" else "s"}"
+                }, onClick = { dialog = "apps" })
                 Divider()
                 SettingRow(
                     Icons.Filled.NotificationAdd, "Alert for each new expense", value = "A small alert like \"₹250 · Swiggy · Food\".",
@@ -334,7 +341,7 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
         "salary" -> MoneyDialog("Monthly salary", s.salaryPaise, false, close) { p -> vm.updateSettings { it.copy(salaryPaise = p) }; dialog = null }
         "goal" -> MoneyDialog("Savings goal per month", s.savingsGoalPaise, true, close) { p -> vm.updateSettings { it.copy(savingsGoalPaise = p) }; dialog = null }
         "payday" -> PayDayDialog(s.payDay, close) { d -> vm.updateSettings { it.copy(payDay = d) }; dialog = null }
-        "apps" -> AppsPage(s, close) { csv -> vm.updateSettings { it.copy(allowedPackages = csv) } }
+        "apps" -> AppsPage(s, smart, { on -> smart = on; Prefs.setSmartDetect(ctx, on) }, close) { csv -> vm.updateSettings { it.copy(allowedPackages = csv) } }
         "rules" -> RulesPage(vm, close)
         "import" -> ImportSheet(vm, perm.sms, actions.askSms, close)
         "delete1" -> AlertDialog(
@@ -427,60 +434,136 @@ private fun FullScreenPage(title: String, subtitle: String?, onClose: () -> Unit
 }
 
 @Composable
-private fun AppsPage(s: SettingsEntity, onDismiss: () -> Unit, onChange: (String) -> Unit) {
+private fun AppRow(a: AppInfo, subtitle: String?, on: Boolean, onToggle: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 56.dp)
+            .toggleable(value = on, onValueChange = onToggle)
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (a.icon != null) {
+            Image(a.icon, contentDescription = null, modifier = Modifier.size(40.dp))
+        } else {
+            Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainer))
+        }
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(a.label, style = MaterialTheme.typography.bodyLarge)
+            if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Checkbox(checked = on, onCheckedChange = null)
+    }
+}
+
+@Composable
+private fun AppsPage(
+    s: SettingsEntity,
+    smart: Boolean,
+    onSmart: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+    onChange: (String) -> Unit,
+) {
     val ctx = LocalContext.current
     var apps by remember { mutableStateOf<List<AppInfo>?>(null) }
     var selected by remember { mutableStateOf(s.allowedPackageSet) }
-    val initial = remember { s.allowedPackageSet }
     var query by remember { mutableStateOf("") }
+    var othersOpen by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(Unit) { apps = loadLauncherApps(ctx) }
     fun commit(set: Set<String>) {
         selected = set
         onChange(set.joinToString(","))
     }
     FullScreenPage("Apps to watch", "Alerts from ticked apps are checked for spending.", onDismiss) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            singleLine = true,
-            placeholder = { Text("Search apps") },
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-            trailingIcon = {
-                if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Filled.Close, contentDescription = "Clear search") }
-            },
-        )
-        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("${selected.count { pk -> apps?.any { it.pkg == pk } == true }} selected", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            TextButton(onClick = { commit(DEFAULT_ALLOWED_PACKAGES.toSet()) }) { Text("Reset to default apps") }
-        }
         val list = apps
-        if (list == null) {
-            Text("Loading apps...", modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            val shown = list
-                .filter { query.isBlank() || it.label.contains(query.trim(), ignoreCase = true) }
-                .sortedWith(compareByDescending<AppInfo> { it.pkg in initial }.thenBy { it.label.lowercase() })
-            if (shown.isEmpty()) {
-                Text("No apps found.", modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val q = query.trim()
+        val matches = { a: AppInfo -> q.isEmpty() || a.label.contains(q, ignoreCase = true) }
+        val payment = list.orEmpty().filter { PaymentApps.byPackage(it.pkg) != null }
+            .sortedWith(compareBy<AppInfo> { PaymentApps.byPackage(it.pkg)!!.kind.ordinal }.thenBy { it.label.lowercase() })
+        val others = list.orEmpty().filter { PaymentApps.byPackage(it.pkg) == null }
+            .sortedWith(compareByDescending<AppInfo> { it.pkg in selected }.thenBy { it.label.lowercase() })
+        val selectedCount = selected.count { pk -> list?.any { it.pkg == pk } == true }
+        LazyColumn(Modifier.weight(1f)) {
+            item {
+                Row(
+                    Modifier.fillMaxWidth().toggleable(value = smart, onValueChange = onSmart).padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Find payments in all apps (smart)", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Checks alerts from any app for completed payments. Chat and social apps are always skipped.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(checked = smart, onCheckedChange = null)
+                }
             }
-            LazyColumn(Modifier.weight(1f)) {
-                items(shown, key = { it.pkg }) { a ->
+            item {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    singleLine = true,
+                    placeholder = { Text("Search apps") },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (query.isNotEmpty()) IconButton(onClick = { query = "" }) { Icon(Icons.Filled.Close, contentDescription = "Clear search") }
+                    },
+                )
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("$selectedCount selected", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    TextButton(onClick = { commit(DEFAULT_ALLOWED_PACKAGES.toSet()) }) { Text("Reset to default apps") }
+                }
+            }
+            if (list == null) {
+                item { Text("Loading apps...", modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            } else {
+                val shownPayment = payment.filter(matches)
+                item {
+                    Text(
+                        "Payment apps on this phone",
+                        modifier = Modifier.padding(start = 16.dp, top = 8.dp, end = 16.dp),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    if (shownPayment.isEmpty()) {
+                        Text(
+                            if (payment.isEmpty()) "No known payment apps found on this phone." else "No payment apps match.",
+                            modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                items(shownPayment, key = { "p:" + it.pkg }) { a ->
                     val on = a.pkg in selected
+                    AppRow(a, PaymentApps.byPackage(a.pkg)?.kind?.label, on) { commit(if (on) selected - a.pkg else selected + a.pkg) }
+                }
+                val shownOthers = others.filter(matches)
+                val open = othersOpen || q.isNotEmpty()
+                item {
                     Row(
-                        Modifier.fillMaxWidth().heightIn(min = 56.dp)
-                            .toggleable(value = on, onValueChange = { commit(if (on) selected - a.pkg else selected + a.pkg) })
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable { othersOpen = !othersOpen }
+                            .padding(start = 16.dp, end = 8.dp, top = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (a.icon != null) {
-                            Image(a.icon, contentDescription = null, modifier = Modifier.size(40.dp))
-                        } else {
-                            Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainer))
-                        }
-                        Spacer(Modifier.width(16.dp))
-                        Text(a.label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                        Checkbox(checked = on, onCheckedChange = null)
+                        Text(
+                            "Other apps (${shownOthers.size})",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Icon(
+                            if (open) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                            contentDescription = if (open) "Hide other apps" else "Show other apps",
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                    }
+                }
+                if (open) {
+                    items(shownOthers, key = { "o:" + it.pkg }) { a ->
+                        val on = a.pkg in selected
+                        AppRow(a, null, on) { commit(if (on) selected - a.pkg else selected + a.pkg) }
                     }
                 }
             }

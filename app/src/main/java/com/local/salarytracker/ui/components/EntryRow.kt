@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import com.local.salarytracker.data.TxnEntity
 import com.local.salarytracker.model.TxnSource
 import com.local.salarytracker.model.TxnType
+import com.local.salarytracker.ui.AppLabels
 import com.local.salarytracker.ui.Fmt
 import com.local.salarytracker.ui.theme.AppColors
 import com.local.salarytracker.ui.theme.MoneyStyle
@@ -36,9 +37,10 @@ fun EntryRow(t: TxnEntity, zone: ZoneId, modifier: Modifier = Modifier, onClick:
     val title = t.merchant?.takeIf { it.isNotBlank() }
         ?: t.note?.takeIf { it.isNotBlank() }
         ?: if (credit) "Money received" else t.category.displayName
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     val source = when (t.source) {
         TxnSource.SMS -> "SMS"
-        TxnSource.NOTIFICATION -> "App alert"
+        TxnSource.NOTIFICATION -> AppLabels.label(ctx, t.sender)?.let { "App alert · $it" } ?: "App alert"
         TxnSource.MANUAL -> "Cash"
     }
     val sub = Fmt.time(t.timestamp, zone) + " · " + source + if (t.excluded) " · Not spending" else ""

@@ -96,3 +96,48 @@ adb logcat -s SalaryTracker
 - `Money.formatWhole(paise)` = whole rupees rounded (used for Today, Report totals, capture alert, reminder); `Money.format` keeps paise when non-zero (individual entries). `Money.cleanInput` strips non-digits and leading zeros for all amount fields.
 - `DailyBarChart(period, daily, baseDailyPaise, showAllowance)`: y-axis capped at max(2 x baseDaily, 1.1 x highest daily spend); allowance line clipped there with a small triangle marker.
 - Entry editor: Save / Delete live in a bottom bar outside the scrolling form. Today progress bar uses `gapSize = 0.dp, drawStopIndicator = {}`.
+
+---
+
+# UI part 1 (design system, shell, Today, Add/Edit)
+
+Spec: `docs/UI_SPEC.md`. History / Report / Settings / Onboarding still have the old layout (only adapted to compile); part 2 redesigns them with the components below.
+
+## Theme (`ui/theme/`)
+- `SalaryTrackerTheme(darkTheme = isSystemInDarkTheme(), content)` - emerald brand, no dynamic colour. Cards = `surfaceContainerLow`, tonal bits = `surfaceContainer`, hero = `primaryContainer`.
+- `AppColors.current` (CompositionLocal `LocalAppColors`): `positive, warning, danger, credit, isDark`. `creditColor()` still exists.
+- `MoneyStyle.Hero|Card|Row|Small|Input` - TextStyles with tabular figures (`tnum`). Use with `Text` / `MoneyText`.
+- `Prefs.themeMode(ctx)/setThemeMode` (`ThemeMode {SYSTEM, LIGHT, DARK}` in `model/Enums.kt`); `AppViewModel.themeMode: StateFlow<ThemeMode>` + `setThemeMode(m)`. `MainActivity` applies it and calls `enableEdgeToEdge` with matching bar icon colours. **Part 2: add Settings > Appearance row that calls `vm.setThemeMode`.**
+
+## Components (`ui/components/`, package `com.local.salarytracker.ui.components`)
+- `ScreenScaffold(title, modifier, titleContent: (@Composable () -> Unit)? = null, navigationIcon = {}, actions: RowScope.() -> Unit = {}, snackbarHost = {}, floatingActionButton = {}, bottomBar = {}, contentWindowInsets = ScaffoldDefaults.contentWindowInsets, content: (PaddingValues) -> Unit)` - flat TopAppBar, tints on scroll. Put `padding.calculateTopPadding()` in the list `contentPadding`. In `MainScreen` each tab is wrapped in one with `WindowInsets(0)`; History/Report/Settings still receive `(vm, padding)`.
+- `SectionCard(modifier, containerColor, contentColor, contentPadding = PaddingValues(16.dp), onClick: (() -> Unit)? = null, content: ColumnScope.() -> Unit)` - 20dp radius, border in light only, `animateContentSize`.
+- `SectionHeader(title, modifier, subtitle: String? = null, trailing: (@Composable () -> Unit)? = null)`; `ScreenGutter = 16.dp`.
+- `MoneyText(paise, modifier, style = MoneyStyle.Card, color, whole = true, plus = false, strikethrough = false, textAlign, maxLines = 1)`.
+- `StatTile(label, value: String, modifier, caption: String? = null, progress: Float? = null, valueColor, progressColor)`.
+- `CategoryIcon(category, size = 40.dp, modifier, credit = false)`; extension props `Category.icon: ImageVector` and `Category.label` ("Not spending" for TRANSFER).
+- `EntryRow(t: TxnEntity, zone: ZoneId, modifier = Modifier, onClick: () -> Unit)` - the old `ui.EntryRow`, `ui.PeriodSwitcher`, `SourceChip` were removed from `Common.kt`.
+- `PeriodSwitcher(label, canGoBack, canGoForward, onBack, onForward, modifier)` - pill, label cross-fades.
+- `EmptyState(icon, title, text, modifier, action: (@Composable () -> Unit)? = null)`.
+- `InfoBanner(icon, text, modifier, tone: BannerTone = Info|Positive|Warning|Danger, action: (@Composable () -> Unit)? = null)`.
+- `StatusChip(ok: Boolean, modifier, okLabel = "Allowed", neededLabel = "Needs permission")`.
+- `SettingRow(icon, title, modifier, value: String? = null, onClick: (() -> Unit)? = null, danger = false, trailing: (@Composable () -> Unit)? = null)` - chevron when `onClick` and no trailing. For switch rows pass `trailing = { Switch(...) }` and an `onClick` that toggles.
+- `rememberReducedMotion()`, `rememberAppTween<T>(millis = 600)` (instant when animations are off).
+- `Fmt` (in `ui/Common.kt`) gained `greeting(hour)` and `weekdayDate(d)`.
+
+## Shell / Today / Editor
+- `MainScreen`: one Scaffold (Snackbar host, NavigationBar with outlined/filled icons, ExtendedFAB "Add cash" shown on Today; collapses while scrolling down via `LazyListState.isScrollingUpOrAtTop()`).
+- Snackbar: `AppViewModel.messages: MutableSharedFlow<UiMessage(text, actionLabel?, onAction?)>`. `addEntry`/`updateEntry` post "Saved ₹50 · Food"; `deleteEntry` posts "Entry deleted" + Undo (`Repository.restoreTxn` re-inserts the entity with its old id).
+- `TodayState` gained `last7: List<DayBar>` and `tip: String`. Pure helpers (no Android) in `budget/TodayInsights.kt`: `lastDays(today, items, trackingStart, count = 7)` and `tip(snapshot)`; tests in `TodayInsightsTest`. `BudgetEngine` unchanged. The Today query also loads the 6 days before the period start (only for the chart).
+- `EntryEditorSheet`: amount `BasicTextField` with rupee prefix transformation, 4-column category grid, date / time assist chips, switch row, collapsible original message, sticky Save bar (`imePadding`), Delete icon in header, light haptic on save, "Always use X for shop?" dialog kept.
+- Emojis are no longer shown anywhere (the `Category.emoji` field remains in the enum).
+
+---
+
+# UI part 2 (History, Report, Settings, Onboarding) - version 1.1 (code 2)
+
+- **History**: `HistoryScaffold(vm)` (used by `MainScreen`) owns the app bar: search icon -> text field in the bar (state in `AppViewModel.historySearchOpen/historyQuery`, `closeHistorySearch()`). `HistoryScreen`: PeriodSwitcher, summary line, one scrolling filter row ("Source: All" dropdown chip + category chips with `CategoryIcon`), `stickyHeader` day groups with day totals, `EntryRow`, empty state with "Clear filters".
+- **Report**: `ReportState` gained `comparison: Comparison?` and `comparisonPartial`. Pure helpers in `budget/ReportInsights.kt` (`compare`, `sentence`, `spentInFirstDays`, `axisLabel`) with `ReportInsightsTest`. Comparison only when both periods are fully tracked and the earlier one has data; for an unfinished period the same number of days is compared. `MerchantTotal` got an optional `category` (most spent category) for the Top places icons. `ReportScreen` cross-fades content on period change. `Charts.kt`: `DonutChart` (28dp stroke, rounded gaps, animated), `DailyBarChart(period, daily, baseDaily, today, ..)` with y-axis labels, dashed allowance line, today outline, tap-for-tooltip, same y-axis cap as before.
+- **Settings**: grouped `SectionCard`s of `SettingRow`s. Full-screen pages (Dialog) for Apps to watch (search, icons, checkboxes) and Learned categories; `ImportSheet` (ModalBottomSheet) uses `ImportPanel` from `Pickers.kt` (range cards, progress, result). New shared dialogs in `Pickers.kt`: `AppDialog`, `AmountField`, `MoneyDialog`, `PayDayDialog`, `PayMonthCard`, `PayDayPicker(columns)`. Theme uses `vm.setThemeMode`.
+- **Onboarding**: 7 segmented progress bar + back arrow, sticky bottom button (+ Skip on Permissions / Import), content max 480dp. `PermissionCard` replaces `PermRow` in `Permissions.kt`. Behaviour unchanged (settings saved at Savings step, reminder time at Permissions step, trackingStart + lastSmsScanTime on finish).
+- Part-1 fixes done here: hero ring shows remaining share (amber < 20% left, red when over), tip wording "under budget so far", Last-7 chart today colour / label placement / untracked days, `Category.ENTERTAINMENT.displayName` = "Movies & fun", Undo snackbar stays 8 s.

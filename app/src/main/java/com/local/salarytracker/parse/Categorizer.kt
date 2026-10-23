@@ -87,7 +87,7 @@ object Categorizer {
         return true
     }
 
-    fun categorize(merchant: String?, text: String, learnedRules: Map<String, Category>): Category {
+    fun categorize(merchant: String?, text: String, learnedRules: Map<String, Category>, viaGateway: Boolean = false): Category {
         val m = merchant?.trim()?.lowercase().orEmpty()
         val t = text.lowercase()
 
@@ -106,7 +106,7 @@ object Categorizer {
         }
         for ((cat, kws) in TEXT_LEVEL) if (cat != Category.CASH && kws.any { matches(t, it) }) return cat
 
-        if (m.isNotEmpty()) {
+        if (m.isNotEmpty() && !viaGateway) {
             if (looksLikePhone(m)) return Category.PEOPLE
             val upiLike = Regex("\\bupi\\b|\\bvpa\\b|\\bimps\\b|trf to|\\bp2a\\b|@").containsMatchIn(t) && !t.contains("p2m")
             if (upiLike && looksLikePersonName(m)) return Category.PEOPLE

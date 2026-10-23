@@ -32,7 +32,9 @@ internal object ParserCore {
     private val FUTURE = r(
         "will\\s+be\\s+(?:debited|deducted|charged)|is\\s+due|\\bdue\\s+on\\b|\\bdue\\s+date\\b|payment\\s+due|amount\\s+due|\\bdue\\s+by\\b|" +
             "\\brequested\\b|collect\\s+request|requests\\s+(?:rs|₹|you)|auto-?\\s?pay\\s+(?:scheduled|due)|scheduled\\s+for|" +
-            "will\\s+be\\s+credited|\\breminder\\b|please\\s+pay|pay\\s+(?:now|before|by)|\\bsip\\s+instalment\\b|to\\s+be\\s+debited|wants\\s+you\\s+to\\s+pay|has\\s+requested",
+            "will\\s+be\\s+credited|\\brequest\\s+of\\b|\\bpay\\s+(?:rs\\.?|₹|inr)\\s*\\d|\\badd\\s+(?:rs\\.?|₹|inr)\\s*\\d|to\\s+complete\\s+your|" +
+            "refund.{0,40}\\b(?:initiated|in\\s+progress|pending|expected|will)\\b|\\bflat\\s+(?:rs\\.?|₹|inr)|" +
+            "\\breminder\\b|please\\s+pay|pay\\s+(?:now|before|by)|\\bsip\\s+instalment\\b|to\\s+be\\s+debited|wants\\s+you\\s+to\\s+pay|has\\s+requested",
     )
     private val AMC_CONFIRM = r("\\bfolio\\b|\\bnav\\b|units\\s+allotted")
     private val INVEST_MERCHANT = r(
@@ -73,19 +75,29 @@ internal object ParserCore {
     }
 
     // ---------------------------------------------------------------- type words
-    private val STRONG_DEBIT = r("\\b(?:debited|spent|paid(?!\\s+you)|sent(?!\\s+you)|withdrawn|withdrawal|deducted|transferred|dr)\\b")
+    private val STRONG_DEBIT = r("\\b(?:debited|spent|charged|paid(?!\\s+you)|sent(?!\\s+you)|withdrawn|withdrawal|deducted|transferred|dr)\\b")
     private val STRONG_CREDIT = r(
         "\\b(?:credited|received|deposited|refund(?:ed)?|reversed|reversal|cashback\\s+credited|cr|(?:sent|paid)\\s+you)\\b",
     )
     private val WEAK_DEBIT = r("\\b(?:txn\\s+of|transaction\\s+of|payment\\s+of|purchase|used\\s+for|payment\\s+successful|was\\s+successful|order\\s+placed)\\b")
 
-    private fun detectType(text: String): TxnType? {
+    /** Extra completed-payment phrases that only count in app notifications. */
+    private val NOTIF_WEAK = r("\\border\\b.{0,30}\\bconfirmed\\b|auto-?\\s?(?:pay|debit)\\b.{0,60}\\b(?:successful|completed)\\b")
+    private val NOTIF_PENDING = r("\\bpending\\b|\\bprocessing\\b|\\bin\\s+progress\\b|\\bawaiting\\b")
+    private val WALLET_TOPUP = r(
+        "(?:rs\\.?|₹|inr)\\s*[0-9][0-9,]*(?:\\.[0-9]{1,2})?\\s+(?:has\\s+been\\s+|was\\s+|successfully\\s+)?added\\s+to\\s+(?:your\\s+)?(?:[a-z]+\\s+){0,2}wallet|" +
+            "(?:money|balance)\\s+(?:successfully\\s+)?added\\s+to\\s+(?:your\\s+)?(?:[a-z]+\\s+){0,2}wallet",
+    )
+    private val NOT_A_TOPUP = r("cashback|reward|bonus|refund|offer|\\bwon\\b|coupon|gift")
+
+    private fun detectType(text: String, notification: Boolean = false): TxnType? {
         val d = STRONG_DEBIT.find(text)?.range?.first
         val c = STRONG_CREDIT.find(text)?.range?.first
         if (d != null && c != null) return if (c < d) TxnType.CREDIT else TxnType.DEBIT
         if (c != null) return TxnType.CREDIT
         if (d != null) return TxnType.DEBIT
         if (WEAK_DEBIT.containsMatchIn(text)) return TxnType.DEBIT
+        if (notification && NOTIF_WEAK.containsMatchIn(text)) return TxnType.DEBIT
         return null
     }
 
@@ -114,7 +126,7 @@ internal object ParserCore {
 
     // ---------------------------------------------------------------- merchant
     private const val STOP =
-        "(?=\\s+(?:on|ref|refno|rrn|upi|via|utr|avl|avail|bal|txn|dated|date|using|from|is|has|was|call|not|if|thru|through|sms|cust|total|with|for|vide)\\b|[.;,(|]|\\s-|$)"
+        "(?=\\s+(?:on|ref|refno|rrn|upi|via|utr|avl|avail|bal|txn|dated|date|using|from|is|has|was|call|not|if|thru|through|sms|cust|total|with|for|vide|successful|successfully|completed|confirmed)\\b|[.;,(|]|\\s-|$)"
     private val TAIL_CUT = r("\\bnot\\s+you\\b|\\bif\\s+not\\b|\\bnot\\s+u\\b|\\bcall\\b|sms\\s+block|to\\s+block|\\bdispute\\b")
     private val SLASH_FORMS = r("(?:upi|imps|neft)/(?:[a-z0-9]{1,4}/){0,2}\\d{6,}/([^/]+)")
     private val VPA_TO = r("\\b(?:to|from|by|vpa)\\s+(?:vpa\\s+)?([\\w.\\-]+)@[a-z]+")
@@ -122,7 +134,7 @@ internal object ParserCore {
     private val AT = r("\\bat\\s+(?!\\d)(.+?)$STOP")
     private val TOWARDS = r("\\btowards\\s+(?!your\\b|a/c\\b)(.+?)$STOP")
     private val TO = r("\\bto\\s+(?!your\\b|a/c\\b|ac\\b|acct\\b|account\\b|\\d|the\\s+(?:a/c|account)\\b|block\\b|self\\b)(.+?)$STOP")
-    private val FROM_CREDIT = r("\\b(?:transfer\\s+from|received\\s+from|refund\\s+from|from)\\s+(?!rs\\b|inr\\b|₹|a/c\\b|ac\\b|acct\\b|account\\b|\\d|your\\b|hdfc\\b|sbi\\b|bank\\b|vpa\\b|[x*])(.+?)$STOP")
+    private val FROM_CREDIT = r("\\b(?:transfer\\s+from|received\\s+from|refund\\s+from|paid\\s+by|from)\\s+(?!rs\\b|inr\\b|₹|a/c\\b|ac\\b|acct\\b|account\\b|\\d|your\\b|hdfc\\b|sbi\\b|bank\\b|vpa\\b|[x*])(.+?)$STOP")
     private val FOR = r("\\bfor\\s+(?!rs\\b|inr\\b|₹|\\d|your\\b|a/c\\b)(.+?)$STOP")
     private val DEBIT_CREDITED_NAME = r("[;,]\\s*([a-z][a-z .]{1,40}?)\\s+credited")
     private val ANY_VPA = r("([\\w.\\-]+)@[a-z]{2,}")
@@ -130,8 +142,7 @@ internal object ParserCore {
     private fun cleanVpa(local: String): String? {
         val digitsOnly = local.filter { it.isDigit() }
         if (digitsOnly.length >= 10 && local.all { it.isDigit() || it == '+' }) return digitsOnly.takeLast(10)
-        val stripped = local.replace(Regex("[._\\-]+"), " ").trim().replace(Regex("\\d+$"), "").trim()
-        return stripped.ifEmpty { null }
+        return MerchantCleaner.cleanVpaLocal(local)
     }
 
     internal fun titleCase(s: String): String =
@@ -143,6 +154,8 @@ internal object ParserCore {
         var s = raw.trim().trim('.', ',', ':', '-', '/', '*', '\'', '"', '!').trim()
         if (s.contains('@')) s = cleanVpa(s.substringBefore('@')) ?: return null
         s = s.replace(Regex("\\s+"), " ")
+        s = MerchantCleaner.cleanName(s) ?: return null
+        s = s.trim('.', ',', ':', '-', '/', '*', '\'', '"', '!').trim()
         if (s.length > 60) {
             val atBoundary = s[60].isWhitespace()
             s = s.take(60)
@@ -184,6 +197,25 @@ internal object ParserCore {
         return null
     }
 
+    // ---------------------------------------------------------------- gateway detection
+    private const val GW_NAMES = "razorpay|rzp|payu|cashfree|paytm|bharatpe|pine\\s*labs|pinelabs|ccavenue|billdesk|juspay|easebuzz|instamojo"
+    private val GW_STAR = r("(?<![a-z0-9])(?:$GW_NAMES)\\s*\\*|(?<![a-z0-9])cf[*.][a-z0-9]")
+    private val P2M = r("(?<![a-z0-9])p2m(?![a-z0-9])")
+    private val GW_VPA_TOKENS = setOf(
+        "razorpay", "rzp", "payu", "cashfree", "bharatpe", "pinelabs", "billdesk", "juspay", "easebuzz", "instamojo", "ccavenue",
+    )
+
+    /** True when the payee was routed via a gateway / aggregator (RAZORPAY*, rzp VPA, UPI/P2M/ ...): always a business. */
+    fun isViaGateway(text: String): Boolean {
+        if (GW_STAR.containsMatchIn(text) || P2M.containsMatchIn(text)) return true
+        return ANY_VPA.findAll(text).any { m ->
+            m.groupValues[1].split(Regex("[._\\-]+")).any { t ->
+                val l = t.lowercase()
+                l in GW_VPA_TOKENS || l.startsWith("paytmqr")
+            }
+        }
+    }
+
     // ---------------------------------------------------------------- main entry
     /**
      * @param notification relax some rules: [extraDebitWords] enables weak debit phrases like "payment successful".
@@ -205,7 +237,12 @@ internal object ParserCore {
         if (!strong && BALANCE_ONLY.containsMatchIn(text)) return null
 
         val amount = findAmount(text) ?: return null
-        val type = detectType(text) ?: return null
+        if (notification && NOTIF_PENDING.containsMatchIn(text)) return null
+        if (notification && WALLET_TOPUP.containsMatchIn(text) && !NOT_A_TOPUP.containsMatchIn(text)) {
+            // Own wallet top-up: money moves between own accounts, never spending or income.
+            return ParsedTxn(amount, TxnType.CREDIT, null, null, null, excluded = true, isSalary = false)
+        }
+        val type = detectType(text, notification) ?: return null
         if (type == TxnType.CREDIT && SOFT_PROMO.containsMatchIn(text) && !strong) return null
 
         val merchant = extractMerchant(text, type)
@@ -215,6 +252,6 @@ internal object ParserCore {
             (merchant != null && CC_MERCHANT.containsMatchIn(merchant)) ||
             (type == TxnType.DEBIT && merchant != null && INVEST_MERCHANT.containsMatchIn(merchant))
         val salary = type == TxnType.CREDIT && SALARY.containsMatchIn(text)
-        return ParsedTxn(amount, type, merchant, last4, ref, excluded, salary)
+        return ParsedTxn(amount, type, merchant, last4, ref, excluded, salary, viaGateway = isViaGateway(text))
     }
 }

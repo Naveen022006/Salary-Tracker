@@ -3,6 +3,9 @@ package com.local.salarytracker.model
 /** Direction of money. */
 enum class TxnType { DEBIT, CREDIT }
 
+/** App colour theme choice (stored in Prefs). */
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
 /** Where a transaction came from. */
 enum class TxnSource { SMS, NOTIFICATION, MANUAL }
 
@@ -23,7 +26,7 @@ enum class Category(
     RENT_EMI("Rent / EMI", "🏠", 0xFF6D4C41, true),
     SHOPPING("Shopping", "🛍️", 0xFF8E24AA),
     HEALTH("Health", "💊", 0xFFE53935),
-    ENTERTAINMENT("Entertainment", "🎬", 0xFFD81B60),
+    ENTERTAINMENT("Movies & fun", "🎬", 0xFFD81B60),
     EDUCATION("Education", "🎓", 0xFF3949AB),
     PEOPLE("People", "👤", 0xFF00ACC1),
     CASH("Cash / ATM", "💵", 0xFF7CB342),

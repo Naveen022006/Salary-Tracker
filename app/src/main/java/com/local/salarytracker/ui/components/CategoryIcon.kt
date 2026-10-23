@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -53,14 +54,16 @@ val Category.icon: ImageVector
 val Category.label: String get() = if (this == Category.TRANSFER) "Not spending" else displayName
 
 /**
- * Category icon on a circle of the category colour at 12% alpha. Use 40.dp in lists, 48.dp in pickers.
- * [credit] shows the "money received" icon in green instead.
+ * Category icon on a circle of the category colour at 16% (light) / 22% (dark) alpha. Use 40.dp in lists, 48.dp in pickers.
+ * [credit] shows the "money received" icon in teal instead.
  */
 @Composable
 fun CategoryIcon(category: Category, size: Dp = 40.dp, modifier: Modifier = Modifier, credit: Boolean = false) {
-    val tint = if (credit) AppColors.current.credit else Color(category.color)
+    val dark = AppColors.current.isDark
+    // Dark theme: lift the category colour 15% toward white so it keeps 3:1 on its 22% circle.
+    val tint = if (credit) AppColors.current.credit else Color(category.color).let { if (dark) lerp(it, Color.White, 0.15f) else it }
     Box(
-        modifier.size(size).clip(CircleShape).background(tint.copy(alpha = 0.12f)),
+        modifier.size(size).clip(CircleShape).background(tint.copy(alpha = if (dark) 0.22f else 0.16f)),
         contentAlignment = Alignment.Center,
     ) {
         Icon(

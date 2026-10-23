@@ -19,19 +19,19 @@ enum class Category(
     val color: Long,
     val isFixed: Boolean = false,
 ) {
-    FOOD("Food", "🍔", 0xFFEF6C00),
-    GROCERIES("Groceries", "🛒", 0xFF43A047),
-    TRAVEL("Travel & Fuel", "🚗", 0xFF1E88E5),
-    BILLS("Bills & Recharge", "💡", 0xFFFDD835, true),
-    RENT_EMI("Rent / EMI", "🏠", 0xFF6D4C41, true),
-    SHOPPING("Shopping", "🛍️", 0xFF8E24AA),
-    HEALTH("Health", "💊", 0xFFE53935),
-    ENTERTAINMENT("Movies & fun", "🎬", 0xFFD81B60),
-    EDUCATION("Education", "🎓", 0xFF3949AB),
-    PEOPLE("People", "👤", 0xFF00ACC1),
-    CASH("Cash / ATM", "💵", 0xFF7CB342),
-    TRANSFER("Transfer", "🔁", 0xFF90A4AE),
-    OTHER("Other", "📦", 0xFF757575);
+    FOOD("Food", "🍔", 0xFFF97316),
+    GROCERIES("Groceries", "🛒", 0xFF22A06B),
+    TRAVEL("Travel & Fuel", "🚗", 0xFF3B82F6),
+    BILLS("Bills & Recharge", "💡", 0xFFEAB308, true),
+    RENT_EMI("Rent / EMI", "🏠", 0xFFA16207, true),
+    SHOPPING("Shopping", "🛍️", 0xFFC026D3),
+    HEALTH("Health", "💊", 0xFFF43F5E),
+    ENTERTAINMENT("Movies & fun", "🎬", 0xFFEC4899),
+    EDUCATION("Education", "🎓", 0xFF6366F1),
+    PEOPLE("People", "👤", 0xFF0EA5E9),
+    CASH("Cash / ATM", "💵", 0xFF84CC16),
+    TRANSFER("Transfer", "🔁", 0xFF94A3B8),
+    OTHER("Other", "📦", 0xFFA8A29E);
 
     companion object {
         fun fromName(name: String?): Category = entries.firstOrNull { it.name == name } ?: OTHER

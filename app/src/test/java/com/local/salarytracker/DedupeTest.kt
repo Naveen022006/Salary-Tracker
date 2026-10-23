@@ -42,6 +42,12 @@ class DedupeTest {
     @Test fun creditAndDebitNeverMerge() =
         assertFalse(Dedupe.isDuplicate(k(), k(src = TxnSource.NOTIFICATION, type = TxnType.CREDIT)))
 
+    @Test fun notificationsFromDifferentAppsSameAmountMerge() =
+        assertTrue(Dedupe.isDuplicate(k(src = TxnSource.NOTIFICATION), k(ts = t0 + 4 * 60_000, src = TxnSource.NOTIFICATION)))
+
+    @Test fun notificationsTwoSmsStillSeparate() =
+        assertFalse(Dedupe.isDuplicate(k(src = TxnSource.SMS), k(ts = t0 + 4 * 60_000, src = TxnSource.SMS)))
+
     @Test fun bodyHashStableAndWhitespaceInsensitive() {
         val a = Dedupe.bodyHash(TxnSource.SMS, "VM-HDFCBK", "Sent  Rs.250 To X", t0)
         val b = Dedupe.bodyHash(TxnSource.SMS, "VM-HDFCBK", "sent rs.250 to x ", t0 + 1000)

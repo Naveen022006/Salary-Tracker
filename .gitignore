@@ -1,0 +1,16 @@
+# Signing key and its passwords: never commit (public repo)
+*.keystore
+*.jks
+keystore.properties
+
+# Machine-specific and build output
+local.properties
+.gradle/
+.kotlin/
+build/
+*.apk
+*.aab
+*.idsig
+*.iml
+.idea/
+.DS_Store

@@ -19,38 +19,17 @@ data class ParsedTxn(
     val excluded: Boolean,
     val isSalary: Boolean,
     val timestampHint: Long? = null,
+    /** Category suggested by the source app (used only when the merchant gives no better category). */
+    val categoryHint: com.local.salarytracker.model.Category? = null,
+    /** Payee came through a payment gateway / aggregator / P2M marker, so it is a business and never PEOPLE. */
+    val viaGateway: Boolean = false,
 )
 
 /**
- * Default notification allow-list (package names). Messaging apps are deliberately absent
- * (com.whatsapp is NOT included); SMS apps are always ignored by [NotificationParser].
+ * Default notification allow-list: every package of the [PaymentApps] catalog. Messaging / social apps are
+ * deliberately absent; SMS apps are always ignored by [NotificationParser].
  */
-val DEFAULT_ALLOWED_PACKAGES: List<String> = listOf(
-    "com.google.android.apps.nbu.paisa.user", // GPay
-    "com.phonepe.app",
-    "net.one97.paytm",
-    "in.org.npci.upiapp", // BHIM
-    "com.dreamplug.androidapp", // CRED
-    "in.amazon.mShop.android.shopping",
-    "in.swiggy.android",
-    "in.swiggy.android.instamart",
-    "com.application.zomato",
-    "com.flipkart.android",
-    "com.sbi.lotusintouch",
-    "com.snapwork.hdfc",
-    "com.csam.icici.bank.imobile",
-    "com.axis.mobile",
-    "com.msf.kbank.mobile", // Kotak
-    "com.mobikwik_new",
-    "com.razorpay.payments.app",
-    "com.samsung.android.spay", // Samsung Wallet
-    "com.meesho.supply",
-    "com.myairtelapp",
-    "com.bt.bms", // BookMyShow
-    "com.net.pvr",
-    "in.startv.hotstar",
-    "com.netflix.mediaclient",
-)
+val DEFAULT_ALLOWED_PACKAGES: List<String> = PaymentApps.ALL.map { it.pkg }
 
 /** SMS apps whose notifications are ignored (the SMS receiver already covers them). */
 val SMS_APP_PACKAGES: Set<String> = setOf(

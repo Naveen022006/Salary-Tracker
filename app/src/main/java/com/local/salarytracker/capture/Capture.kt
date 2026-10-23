@@ -1,14 +1,19 @@
 package com.local.salarytracker.capture
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.os.Build
 import android.util.Log
 import com.local.salarytracker.BudgetService
+import com.local.salarytracker.Prefs
 import com.local.salarytracker.data.AppDatabase
 import com.local.salarytracker.data.Repository
 import com.local.salarytracker.model.TxnSource
 import com.local.salarytracker.model.TxnType
 import com.local.salarytracker.parse.NotificationParser
 import com.local.salarytracker.parse.ParsedTxn
+import com.local.salarytracker.parse.PaymentApps
+import com.local.salarytracker.parse.SmartDetect
 import com.local.salarytracker.parse.SMS_APP_PACKAGES
 import com.local.salarytracker.parse.SmsParser
 import com.local.salarytracker.util.Money
@@ -32,10 +37,27 @@ object Capture {
         val s = repo.getSettings()
         if (!s.notifEnabled) return "ignored (notification capture is off)"
         if (pkg == ctx.packageName || pkg in SMS_APP_PACKAGES) return "ignored (SMS app or own app)"
-        if (pkg !in s.allowedPackageSet) return "ignored (app $pkg is not in the watch list)"
-        val parsed = NotificationParser.parse(pkg, title, text) ?: return "ignored (not a money transaction)"
+        val smart: Boolean
+        if (pkg in s.allowedPackageSet) {
+            smart = false
+        } else {
+            // Apps of the catalog that the user unticked stay off; unknown apps go through the strict smart rule.
+            if (PaymentApps.byPackage(pkg) != null) return "ignored (app $pkg is not in the watch list)"
+            if (!Prefs.smartDetect(ctx)) return "ignored (app $pkg is not in the watch list, smart mode is off)"
+            if (SmartDetect.isBlockedPackage(pkg) || isSocialApp(ctx, pkg)) return "ignored (chat / social / system app)"
+            smart = true
+        }
+        val parsed = (if (smart) NotificationParser.parseSmart(pkg, title, text) else NotificationParser.parse(pkg, title, text))
+            ?: return "ignored (not a money transaction)"
         val raw = listOfNotNull(title?.takeIf { it.isNotBlank() }, text?.takeIf { it.isNotBlank() }).joinToString("\n")
         return store(ctx, repo, parsed, TxnSource.NOTIFICATION, pkg, timestamp, raw, s.alertOnCapture)
+    }
+
+    /** Apps Android itself files under "Social & communication" are never read by smart mode. */
+    private fun isSocialApp(ctx: Context, pkg: String): Boolean = try {
+        Build.VERSION.SDK_INT >= 26 && ctx.packageManager.getApplicationInfo(pkg, 0).category == ApplicationInfo.CATEGORY_SOCIAL
+    } catch (_: Exception) {
+        false
     }
 
     private suspend fun store(

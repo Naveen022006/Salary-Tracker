@@ -10,6 +10,14 @@ object Prefs {
     fun reminderEnabled(ctx: Context) = p(ctx).getBoolean("reminder_enabled", true)
     fun setReminderEnabled(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("reminder_enabled", v).apply()
 
+    /** Smart mode: also look for completed payments in alerts from apps that are not in the watch list. Default on. */
+    fun smartDetect(ctx: Context) = p(ctx).getBoolean("smart_detect", true)
+    fun setSmartDetect(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("smart_detect", v).apply()
+
+    /** Set once the payment-app catalog (v2) has been merged into an existing watch list. */
+    fun catalogMigrated(ctx: Context) = p(ctx).getBoolean("catalog_v2_migrated", false)
+    fun setCatalogMigrated(ctx: Context) = p(ctx).edit().putBoolean("catalog_v2_migrated", true).apply()
+
     /** Light / dark / follow the phone. */
     fun themeMode(ctx: Context): ThemeMode =
         ThemeMode.entries.firstOrNull { it.name == p(ctx).getString("theme_mode", null) } ?: ThemeMode.SYSTEM

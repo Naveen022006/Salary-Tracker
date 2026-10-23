@@ -9,8 +9,12 @@ import androidx.lifecycle.viewModelScope
 import com.local.salarytracker.Prefs
 import com.local.salarytracker.budget.BudgetEngine
 import com.local.salarytracker.budget.BudgetSnapshot
+import com.local.salarytracker.budget.Comparison
+import com.local.salarytracker.budget.ReportInsights
 import com.local.salarytracker.budget.Period
+import com.local.salarytracker.budget.DayBar
 import com.local.salarytracker.budget.PeriodReport
+import com.local.salarytracker.budget.TodayInsights
 import com.local.salarytracker.capture.InboxScanner
 import com.local.salarytracker.data.AppDatabase
 import com.local.salarytracker.data.CategoryRuleEntity
@@ -18,14 +22,17 @@ import com.local.salarytracker.data.Repository
 import com.local.salarytracker.data.SettingsEntity
 import com.local.salarytracker.data.TxnEntity
 import com.local.salarytracker.model.Category
+import com.local.salarytracker.model.ThemeMode
 import com.local.salarytracker.model.TxnSource
 import com.local.salarytracker.model.TxnType
 import com.local.salarytracker.parse.NotificationParser
 import com.local.salarytracker.parse.SmsParser
 import com.local.salarytracker.toSpendItem
+import com.local.salarytracker.util.Money
 import com.local.salarytracker.work.ReminderScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -55,6 +62,9 @@ sealed interface ImportState {
 
 data class EditorRequest(val txnId: Long?)
 
+/** A short message for the Snackbar; [onAction] runs when the user taps [actionLabel] (for example Undo). */
+data class UiMessage(val text: String, val actionLabel: String? = null, val onAction: (() -> Unit)? = null)
+
 data class TodayState(
     val settings: SettingsEntity,
     val today: LocalDate,
@@ -62,11 +72,25 @@ data class TodayState(
     val todayTxns: List<TxnEntity>,
     val salaryCredit: TxnEntity?,
     val trackingStart: LocalDate?,
+    /** Daily spending for the last 7 days, oldest first. */
+    val last7: List<DayBar> = emptyList(),
+    /** One plain sentence about the month. */
+    val tip: String = "",
 )
 
 data class HistoryState(val period: Period, val offset: Int, val maxOffset: Int, val txns: List<TxnEntity>)
 
-data class ReportState(val period: Period, val offset: Int, val maxOffset: Int, val report: PeriodReport, val hasData: Boolean)
+data class ReportState(
+    val period: Period,
+    val offset: Int,
+    val maxOffset: Int,
+    val report: PeriodReport,
+    val hasData: Boolean,
+    /** Spending compared with the period before; null when that period has no data or is not tracked. */
+    val comparison: Comparison? = null,
+    /** True when only the same number of days of the earlier period were compared. */
+    val comparisonPartial: Boolean = false,
+)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -98,6 +122,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     val today = MutableStateFlow(LocalDate.now())
 
+    /** Snackbar messages ("Saved ₹50 · Food", "Entry deleted" + Undo). */
+    val messages = MutableSharedFlow<UiMessage>(extraBufferCapacity = 8)
+
+    val themeMode = MutableStateFlow(Prefs.themeMode(app))
+
+    fun setThemeMode(m: ThemeMode) {
+        Prefs.setThemeMode(appCtx, m)
+        themeMode.value = m
+    }
+
     val editor = MutableStateFlow<EditorRequest?>(null)
     val importState = MutableStateFlow<ImportState>(ImportState.Idle)
     val rules: StateFlow<List<CategoryRuleEntity>> =
@@ -111,13 +145,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val todayState: StateFlow<TodayState?> = combine(settingsNN, today, trackingStart) { s, t, ts -> Triple(s, t, ts) }
         .flatMapLatest { (s, t, ts) ->
             val p = BudgetEngine.currentPeriod(t, s.payDay)
-            repo.observeTxns(p.startMillis(zone), p.endExclusiveMillis(zone)).map { list ->
+            // Also load the 6 days before the period start so "Last 7 days" works at the start of a month.
+            val from = minOf(p.startMillis(zone), t.minusDays(6).atStartOfDay(zone).toInstant().toEpochMilli())
+            repo.observeTxns(from, p.endExclusiveMillis(zone)).map { all ->
+                val allItems = all.map { it.toSpendItem(zone) }
+                val list = all.filter { dateOf(it) in p }
                 val items = list.map { it.toSpendItem(zone) }
                 val snap = BudgetEngine.compute(p, t, s.salaryPaise, s.savingsGoalPaise, items, ts)
                 val todays = list.filter { dateOf(it) == t }
                 val credit = list.filter { it.type == TxnType.CREDIT && !it.excluded && it.amountPaise != s.salaryPaise && isSalary(it) }
                     .maxByOrNull { it.timestamp }
-                TodayState(s, t, snap, todays, credit, ts)
+                TodayState(s, t, snap, todays, credit, ts, TodayInsights.lastDays(t, allItems, ts), TodayInsights.tip(snap))
             }
         }
         .flowOn(Dispatchers.Default)
@@ -137,6 +175,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------ period navigation (History + Report)
     val historyOffset = MutableStateFlow(0)
+
+    /** History search: shown in the top bar of the History tab. */
+    val historySearchOpen = MutableStateFlow(false)
+    val historyQuery = MutableStateFlow("")
+
+    fun closeHistorySearch() {
+        historySearchOpen.value = false
+        historyQuery.value = ""
+    }
     val reportOffset = MutableStateFlow(0)
 
     private val maxOffset: StateFlow<Int> = combine(settingsNN, today, repo.observeEarliest()) { s, t, earliest ->
@@ -177,9 +224,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val o = (a[2] as Int).coerceAtLeast(0)
         val m = a[3] as Int
         val p = periodAt(s, t, o)
-        repo.observeTxns(p.startMillis(zone), p.endExclusiveMillis(zone)).map { list ->
-            val rep = BudgetEngine.report(p, t, s.salaryPaise, s.savingsGoalPaise, list.map { it.toSpendItem(zone) }, a[4] as LocalDate?)
-            ReportState(p, o, m, rep, list.isNotEmpty())
+        val prev = BudgetEngine.previousPeriod(p, s.payDay)
+        val ts = a[4] as LocalDate?
+        combine(
+            repo.observeTxns(p.startMillis(zone), p.endExclusiveMillis(zone)),
+            repo.observeTxns(prev.startMillis(zone), prev.endExclusiveMillis(zone)),
+        ) { list, prevList ->
+            val rep = BudgetEngine.report(p, t, s.salaryPaise, s.savingsGoalPaise, list.map { it.toSpendItem(zone) }, ts)
+            // Compare only when this period and the one before are both fully tracked and the earlier one has spending.
+            var comparison: Comparison? = null
+            var partial = false
+            val tracked = !rep.beforeTracking && rep.trackingStart == null && (ts == null || !ts.isAfter(prev.start))
+            if (tracked && prevList.isNotEmpty()) {
+                val prevItems = prevList.map { it.toSpendItem(zone) }
+                val prevSpent: Long
+                if (rep.finished) {
+                    prevSpent = ReportInsights.spentInFirstDays(prevItems, prev.start, prev.days)
+                } else {
+                    val elapsed = (java.time.temporal.ChronoUnit.DAYS.between(p.start, t) + 1).toInt().coerceIn(1, prev.days)
+                    prevSpent = ReportInsights.spentInFirstDays(prevItems, prev.start, elapsed)
+                    partial = true
+                }
+                comparison = ReportInsights.compare(rep.spentPaise, prevSpent)
+            }
+            ReportState(p, o, m, rep, list.isNotEmpty(), comparison, partial && comparison != null)
         }
     }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
@@ -235,6 +303,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     ),
                 )
             }
+            messages.tryEmit(UiMessage(savedText(amountPaise, if (excluded) Category.TRANSFER else category)))
         }
     }
 
@@ -243,11 +312,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             repo.updateTxn(updated)
             if (rememberCategory != null) repo.setCategory(updated, rememberCategory, true)
+            messages.tryEmit(UiMessage(savedText(updated.amountPaise, if (updated.excluded) Category.TRANSFER else updated.category)))
         }
     }
 
+    private fun savedText(paise: Long, c: Category) = "Saved ${Money.format(paise)} · ${if (c == Category.TRANSFER) "Not spending" else c.displayName}"
+
+    /** Deletes [t] and shows "Entry deleted" with an Undo button that puts it back. */
     fun deleteEntry(t: TxnEntity) {
-        viewModelScope.launch { repo.deleteTxn(t) }
+        viewModelScope.launch {
+            repo.deleteTxn(t)
+            messages.tryEmit(UiMessage("Entry deleted", "Undo") { viewModelScope.launch { repo.restoreTxn(t) } })
+        }
     }
 
     // ------------------------------------------------------------ SMS import

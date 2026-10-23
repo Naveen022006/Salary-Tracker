@@ -127,6 +127,11 @@ class Repository(private val db: AppDatabase) {
 
     suspend fun updateTxn(txn: TxnEntity) = txns.update(txn)
     suspend fun deleteTxn(txn: TxnEntity) = txns.delete(txn)
+
+    /** Puts a deleted txn back with its old id (used by the Undo button). */
+    suspend fun restoreTxn(txn: TxnEntity) {
+        txns.insert(txn)
+    }
     suspend fun deleteAllTxns() = txns.deleteAll()
 
     /**

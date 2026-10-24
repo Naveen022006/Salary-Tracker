@@ -57,6 +57,7 @@ object PaymentApps {
         upi("money.jupiter", "Jupiter"),
         PaymentApp("indwin.c3.shareapp", "slice", AppKind.CARD),
         upi("money.super.payments", "super.money"),
+        upi("com.nextbillion.groww", "Groww UPI"),
         wallet("com.samsung.android.spay", "Samsung Wallet"),
         wallet("com.enstage.wibmo.hdfc", "PayZapp"),
         upi("com.sbi.upi", "BHIM SBI Pay"),

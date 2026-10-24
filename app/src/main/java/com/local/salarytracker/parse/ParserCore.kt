@@ -126,7 +126,7 @@ internal object ParserCore {
 
     // ---------------------------------------------------------------- merchant
     private const val STOP =
-        "(?=\\s+(?:on|ref|refno|rrn|upi|via|utr|avl|avail|bal|txn|dated|date|using|from|is|has|was|call|not|if|thru|through|sms|cust|total|with|for|vide|successful|successfully|completed|confirmed)\\b|[.;,(|]|\\s-|$)"
+        "(?=\\s+(?:on|ref|refno|rrn|upi|via|utr|avl|avail|bal|txn|dated|date|using|from|is|has|was|call|not|if|thru|through|sms|cust|total|with|for|vide|in\\s+your|successful|successfully|completed|confirmed)\\b|[.;,(|]|\\s-|$)"
     private val TAIL_CUT = r("\\bnot\\s+you\\b|\\bif\\s+not\\b|\\bnot\\s+u\\b|\\bcall\\b|sms\\s+block|to\\s+block|\\bdispute\\b")
     private val SLASH_FORMS = r("(?:upi|imps|neft)/(?:[a-z0-9]{1,4}/){0,2}\\d{6,}/([^/]+)")
     private val VPA_TO = r("\\b(?:to|from|by|vpa)\\s+(?:vpa\\s+)?([\\w.\\-]+)@[a-z]+")
@@ -135,6 +135,7 @@ internal object ParserCore {
     private val TOWARDS = r("\\btowards\\s+(?!your\\b|a/c\\b)(.+?)$STOP")
     private val TO = r("\\bto\\s+(?!your\\b|a/c\\b|ac\\b|acct\\b|account\\b|\\d|the\\s+(?:a/c|account)\\b|block\\b|self\\b)(.+?)$STOP")
     private val FROM_CREDIT = r("\\b(?:transfer\\s+from|received\\s+from|refund\\s+from|paid\\s+by|from)\\s+(?!rs\\b|inr\\b|₹|a/c\\b|ac\\b|acct\\b|account\\b|\\d|your\\b|hdfc\\b|sbi\\b|bank\\b|vpa\\b|[x*])(.+?)$STOP")
+    private val PAID_YOU = r("(?:^|[.!:]\\s+)([a-z][a-z0-9 &']{0,40}?)\\s+(?:has\\s+)?(?:paid|sent)\\s+you\\b")
     private val FOR = r("\\bfor\\s+(?!rs\\b|inr\\b|₹|\\d|your\\b|a/c\\b)(.+?)$STOP")
     private val DEBIT_CREDITED_NAME = r("[;,]\\s*([a-z][a-z .]{1,40}?)\\s+credited")
     private val ANY_VPA = r("([\\w.\\-]+)@[a-z]{2,}")
@@ -177,6 +178,7 @@ internal object ParserCore {
         VPA_TO.find(body)?.let { m -> cleanVpa(m.groupValues[1])?.let { return titleCase(it) } }
         TRF_TO.find(body)?.let { m -> cleanName(m.groupValues[1])?.let { return it } }
         if (type == TxnType.CREDIT) {
+            PAID_YOU.find(body)?.let { m -> cleanName(m.groupValues[1])?.let { return it } }
             FROM_CREDIT.find(body)?.let { m -> cleanName(m.groupValues[1])?.let { return it } }
         }
         if (type == TxnType.DEBIT) {

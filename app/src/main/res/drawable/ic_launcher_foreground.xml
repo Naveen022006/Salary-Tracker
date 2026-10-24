@@ -1,9 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Salary Tracker launcher foreground - Concept 1 "Allowance Ring".
+     108dp adaptive-icon canvas; every stroke stays inside the central 66dp safe zone
+     (ring outer edge = 28 + 3 = 31dp from the centre, safe radius is 33dp). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp"
-    android:viewportWidth="108" android:viewportHeight="108">
-    <path android:pathData="M38,36 H70" android:strokeColor="#FFFBBF24" android:strokeWidth="5" android:strokeLineCap="round" />
-    <path android:pathData="M38,47 H70" android:strokeColor="#FFFBBF24" android:strokeWidth="5" android:strokeLineCap="round" />
-    <path android:pathData="M38,36 H52 C65,36 65,58 52,58 H38" android:strokeColor="#FFFBBF24" android:strokeWidth="5" android:strokeLineCap="round" android:strokeLineJoin="round" />
-    <path android:pathData="M44,58 L62,80" android:strokeColor="#FFFBBF24" android:strokeWidth="5" android:strokeLineCap="round" />
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- ring track -->
+    <path
+        android:pathData="M54,26 A28,28 0 1 1 54,82 A28,28 0 1 1 54,26"
+        android:strokeColor="#FFFFFF"
+        android:strokeAlpha="0.28"
+        android:strokeWidth="6" />
+
+    <!-- 80 % progress arc, open at the top, clockwise from 12 o'clock -->
+    <path
+        android:pathData="M54,26 A28,28 0 1 1 27.37,45.35"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round" />
+
+    <!-- rupee glyph -->
+    <path
+        android:pathData="M45,39 H63"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M45,47 H63"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M45,39 H53 C61,39 61,55 53,55 H45"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M48,55 L62,69"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round" />
 </vector>

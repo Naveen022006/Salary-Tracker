@@ -55,7 +55,7 @@ object AssistantNotifier {
         if (!nm.areNotificationsEnabled()) return
         val n = NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat)
-            .setColor(0xFF4338CA.toInt())
+            .setColor(0xFF007AFF.toInt())
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))

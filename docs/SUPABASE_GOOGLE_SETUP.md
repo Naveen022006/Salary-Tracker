@@ -22,11 +22,15 @@ Follow the steps in order. Do not skip steps. Takes about 30 minutes.
 2. Paste the full content of `supabase/migrations/0001_init.sql` and click **Run**. You should see "Success".
    If you ran `0001_init.sql` before 24 Oct 2026, also run `supabase/migrations/0002_fix_rate_limit_bucket.sql` once
    (it fixes the error "column reference "bucket" is ambiguous" that stops all uploads).
-3. Open a new query, paste `supabase/tests/rls_check.sql`, run it block by block.
+3. Run `supabase/migrations/0003_lending.sql` once (for the Lending feature: tables `people` and `loan_entries`, with the same
+   protection as the other tables). Without it the app still syncs everything else and Settings shows
+   "Lending sync needs the 0003 database update". Run it before or after you start using Lending; nothing is lost either way.
+4. Open a new query, paste `supabase/tests/rls_check.sql`, run it block by block.
    - Check 1: all tables show `true` and `true`.
-   - Check 2: each of the 3 tables has 4 policies.
+   - Check 2: each table (5 after 0003) has 4 policies.
    - Check 3 and 4: must return no rows.
    - Check 6: the first three columns must be `false`, the last one `true`.
+   - Checks 7 to 10 (after 0003): lending triggers, counters, owner check and anonymous access.
 
 ## C. Google Cloud Console
 
@@ -92,6 +96,11 @@ Database limits (from `0001_init.sql`, per user). When exceeded, the API answers
 | Max transaction rows per user | 200,000 (HTTP 413) |
 | Max rows per sync batch (app side) | 100 |
 | Max `allowed_packages` | 300 |
+| People writes per minute (0003) | 60 |
+| Lending entry writes per minute (0003) | 300 |
+| Lending entry writes per day (0003) | 5,000 |
+| Max people per user (0003) | 2,000 (HTTP 413) |
+| Max lending entries per user (0003) | 50,000 (HTTP 413) |
 
 Note: an upsert of a row that already exists counts as 2 writes (one insert attempt, one update). Keep this in mind for the per-minute limit.
 
@@ -112,7 +121,8 @@ Note: an upsert of a row that already exists counts as 2 writes (one insert atte
 - **"Developer console is not set up correctly"**: the Android OAuth client is missing or wrong. Create it (step C) and wait 5-10 minutes.
 - **"invalid nonce"**: Supabase Google provider has "Skip nonce check" OFF, so the app must send the nonce. Make sure the app and the Web Client ID are the latest build and the Web Client ID is in "Authorized Client IDs".
 - **HTTP 429 "Too many requests"**: you hit a rate limit (step E). Wait a few minutes and try again.
-- **HTTP 413**: you reached 200,000 transactions. Delete old data.
+- **HTTP 413**: you reached a row limit (200,000 transactions, 2,000 people or 50,000 lending entries). Delete old data.
+- **"Lending sync needs the 0003 database update"**: run `supabase/migrations/0003_lending.sql` once in the SQL Editor (step B3).
 - **Google says "access blocked" / app not verified**: the consent screen is in Testing mode. Add your Gmail under **Test users**, or publish the app.
 - **Sign-in works but no data syncs**: run `supabase/tests/rls_check.sql` and check the tables exist.
 
@@ -123,6 +133,7 @@ Stored in the cloud (your own Supabase project, protected by row level security 
 - Profile: salary, pay day, savings goal, reminder settings, tracking start date, SMS/notification/smart-detect/alert switches, allowed app packages, theme, onboarding flag.
 - Transactions: amount (paise), debit/credit, date and time, merchant, category, source (SMS/NOTIFICATION/MANUAL), sender, last 4 digits of account, UPI reference, your note, excluded flag, deleted flag, and a SHA-256 hash of the message (used only to avoid duplicates).
 - Category rules: keyword and category.
+- Lending (needs 0003): people (name, optional phone, note) and lending entries (who, gave / got back / borrowed / paid back, amount, cash / UPI / bank / card / other, payment app name such as GPay, date, optional return-by date, note).
 - Your Google account id and email (kept by Supabase Auth).
 
 **Never uploaded:** the original SMS text and notification text. Only the hash, which cannot be turned back into text.

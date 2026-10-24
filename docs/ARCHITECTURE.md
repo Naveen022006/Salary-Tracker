@@ -344,3 +344,14 @@ Design: `docs/DESIGN_GLASS.md`. No logic, data or text changes.
   status), `ui/SpendingMapScreen.kt` (`SpendingMapPage`, overlay page from `AppViewModel.spendingMapOpen`,
   `mapPlaces` follows Report's month, `mapFocus` from "Show on map" in the entry editor), Report "Spending map" card.
 - Tests: `MigrationSqlTest` v4 -> v5, `PlaceRecorderTest`.
+
+## Opening animation (splash)
+
+`core-splashscreen` 1.0.1; theme `Theme.SalaryTracker.Starting` (blue `#FF007AFF`, 600 ms, `postSplashScreenTheme`
+= the real theme) is the activity theme. API 31+ shows the `avd_splash_ring` animation (`values-v31`); older
+devices show `ic_splash_static`. `MainActivity` calls `installSplashScreen()` before `super.onCreate()`; the splash
+stays until `AppViewModel.isFirstScreenReady` (settings loaded and sign-in state known) with a 600 ms hard cap.
+The exit listener fades splash + icon (icon scales to 1.08) over 220 ms and sets `splashExiting`, which drives the
+Compose content entrance (alpha 0 to 1, 12 dp rise, 280 ms). With animations off (`ANIMATOR_DURATION_SCALE` 0) the
+splash is removed at once and the content is shown instantly. If the icon view is null only the splash view fades.
+Notification intents are handled in `handleIntent` independent of the splash. Spec: `docs/SPLASH_ANIMATION.md`.

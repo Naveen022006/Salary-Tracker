@@ -181,6 +181,8 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+#variable_conflict use_column
+-- The parameter "bucket" has the same name as the column; ON CONFLICT (…, bucket, …) must mean the column.
 declare
   uid   uuid := auth.uid();
   w     timestamptz;
@@ -193,7 +195,7 @@ begin
   w := to_timestamp(floor(extract(epoch from now()) / window_seconds) * window_seconds);
 
   insert into private.rate_limits as r (user_id, bucket, window_start, hits)
-  values (uid, bucket, w, 1)
+  values (uid, hit.bucket, w, 1)
   on conflict (user_id, bucket, window_start)
   do update set hits = r.hits + 1
   returning r.hits into cnt;

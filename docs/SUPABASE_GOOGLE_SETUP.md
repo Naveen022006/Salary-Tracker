@@ -20,6 +20,8 @@ Follow the steps in order. Do not skip steps. Takes about 30 minutes.
 
 1. Open **SQL Editor -> New query**.
 2. Paste the full content of `supabase/migrations/0001_init.sql` and click **Run**. You should see "Success".
+   If you ran `0001_init.sql` before 24 Oct 2026, also run `supabase/migrations/0002_fix_rate_limit_bucket.sql` once
+   (it fixes the error "column reference "bucket" is ambiguous" that stops all uploads).
 3. Open a new query, paste `supabase/tests/rls_check.sql`, run it block by block.
    - Check 1: all tables show `true` and `true`.
    - Check 2: each of the 3 tables has 4 policies.

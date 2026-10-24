@@ -298,7 +298,7 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
         item {
             Group("Reminders") {
                 SettingRow(
-                    Icons.Filled.NotificationsActive, "Evening reminder", value = "Asks if you spent cash today.",
+                    Icons.Filled.NotificationsActive, "Daily summary", value = "Every evening: what you spent, what is left and how to save.",
                     onClick = { reminderOn = !reminderOn; vm.setReminderEnabled(reminderOn) },
                     trailing = { Switch(checked = reminderOn, onCheckedChange = { reminderOn = it; vm.setReminderEnabled(it) }) },
                 )

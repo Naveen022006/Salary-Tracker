@@ -7,7 +7,13 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.local.salarytracker.BudgetService
 import com.local.salarytracker.Extras
+import com.local.salarytracker.toSpendItem
+import com.local.salarytracker.budget.BudgetEngine
+import com.local.salarytracker.budget.DailySummaryBuilder
+import com.local.salarytracker.budget.SummarySettings
+import kotlinx.coroutines.flow.first
 import com.local.salarytracker.MainActivity
 import com.local.salarytracker.R
 import com.local.salarytracker.data.AppDatabase
@@ -28,8 +34,8 @@ object Notifier {
     fun createChannels(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(CH_REMINDER, "Daily reminder", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "A reminder each evening to add cash spending."
+            NotificationChannel(CH_REMINDER, "Daily summary", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Every evening: what you spent, what is left and how to save."
             },
         )
         nm.createNotificationChannel(
@@ -77,29 +83,37 @@ object Notifier {
         post(ctx, (2000 + txn.id % 100000).toInt(), n)
     }
 
-    /** Evening reminder with today's spend. */
+    /** Evening summary: what was spent today, what is left, savings, and one tip. */
     suspend fun postReminder(ctx: Context) {
         val repo = Repository(AppDatabase.get(ctx))
         val zone = ZoneId.systemDefault()
         val today = LocalDate.now()
-        val from = today.atStartOfDay(zone).toInstant().toEpochMilli()
-        val to = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
-        val spent = repo.getTxns(from, to).filter { it.type == TxnType.DEBIT && !it.excluded }.sumOf { it.amountPaise }
-        val text = "Today you spent ${Money.formatWhole(spent)}. Did you spend any cash? Tap to add."
-        val intent = Intent(ctx, MainActivity::class.java)
+        val s = repo.getSettings()
+        val period = BudgetEngine.currentPeriod(today, s.payDay)
+        val items = repo.getTxns(period.startMillis(zone), period.endExclusiveMillis(zone)).map { it.toSpendItem(zone) }
+        val lending = try { repo.observeLendingTotals().first() } catch (_: Exception) { null }
+        val sum = DailySummaryBuilder.build(
+            today, period, SummarySettings(s.salaryPaise, s.savingsGoalPaise, s.payDay),
+            BudgetService.trackingStart(ctx, s, today), items, lending,
+        )
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val cashIntent = Intent(ctx, MainActivity::class.java)
             .putExtra(Extras.OPEN_ADD_CASH, true)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        val tap = PendingIntent.getActivity(ctx, 1, intent, flags)
-        val action = PendingIntent.getActivity(ctx, 2, Intent(intent), flags)
+        val reportIntent = Intent(ctx, MainActivity::class.java)
+            .putExtra(Extras.OPEN_REPORT, true)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val inbox = NotificationCompat.InboxStyle().setBigContentTitle(sum.title).setSummaryText(sum.tip)
+        sum.lines.forEach { inbox.addLine(it) }
         val n = NotificationCompat.Builder(ctx, CH_REMINDER)
             .setSmallIcon(R.drawable.ic_stat)
             .setColor(0xFF4338CA.toInt())
-            .setContentTitle("Salary Tracker")
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setContentIntent(tap)
-            .addAction(0, "Add cash", action)
+            .setContentTitle(sum.title)
+            .setContentText(sum.collapsed)
+            .setStyle(inbox)
+            .setContentIntent(PendingIntent.getActivity(ctx, 1, reportIntent, flags))
+            .addAction(0, "Add cash", PendingIntent.getActivity(ctx, 2, cashIntent, flags))
+            .addAction(0, "See report", PendingIntent.getActivity(ctx, 3, Intent(reportIntent), flags))
             .setAutoCancel(true)
             .build()
         post(ctx, ID_REMINDER, n)

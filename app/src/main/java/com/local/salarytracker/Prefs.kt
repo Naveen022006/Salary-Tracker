@@ -123,6 +123,7 @@ object Prefs {
 
 object Extras {
     const val OPEN_ADD_CASH = "open_add_cash"
+    const val OPEN_REPORT = "open_report"
     const val TXN_ID = "txn_id"
     /** remoteId of the person to open in the Lending tab (money reminder tap). */
     const val LOAN_PERSON_ID = "loan_person_id"

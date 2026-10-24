@@ -54,6 +54,8 @@ object GoogleSignIn {
         } catch (e: NoCredentialException) {
             throw SignInException("No Google account on this phone. Add one in your phone settings, then try again.")
         } catch (e: GetCredentialException) {
+            // Error type and message only (never tokens), so setup problems can be told apart in logcat.
+            android.util.Log.w("SalaryTracker", "Google sign-in failed: ${e.type}: ${e.message}")
             val text = (e.message.orEmpty() + " " + e.type).lowercase()
             throw SignInException(
                 when {
@@ -88,6 +90,7 @@ object GoogleSignIn {
         } catch (e: SignInException) {
             throw e
         } catch (e: Exception) {
+            android.util.Log.w("SalaryTracker", "Supabase sign-in failed: ${e.javaClass.simpleName}: ${e.message?.take(300)}")
             throw SignInException(
                 when {
                     generateSequence<Throwable>(e) { it.cause }.take(8).any { it is IOException } ->

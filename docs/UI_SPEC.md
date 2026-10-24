@@ -2,7 +2,7 @@
 
 Goal: a calm, professional personal-finance app. Simple English (the user is not a native speaker), big
 clear numbers, one main action per screen, nothing hidden below the fold that the user must find.
-Works offline; no network fonts or images (bundle nothing that needs a download).
+Core tracking works offline (cloud sync runs when online); no network fonts or images (bundle nothing that needs a download).
 
 ## 1. Design system (`ui/theme/`, `ui/components/`)
 
@@ -115,14 +115,14 @@ trailing chevron / switch):
 - **Appearance**: Theme (System / Light / Dark).
 - **Privacy**: card with Lock icon + the existing text.
 - **Danger zone**: "Delete all data" as a danger-coloured row (not a big pink button), keeps the 2-step confirm.
-- Footer: "Salary Tracker 1.1 · Works fully offline".
+- Footer: "Salary Tracker 1.2".
 Edit dialogs: amount dialogs with large ₹ field + Save/Cancel; pay day dialog with the 1–30 grid + "Last day".
 
 ## 8. Onboarding
 - Top: segmented progress bar (7 segments) + back arrow icon (no "Step 5 of 7" text). Bottom: sticky
   primary button (and text "Skip" where optional). Content is centred, max width 480dp.
 - **Welcome**: app mark (rupee in a 96dp emerald circle), "Know what you can spend today", and 3 benefit
-  rows with icons: Automatic tracking · Daily budget · Private (stays on this phone, no internet).
+  rows with icons: Automatic tracking · Daily budget · Private (only you can see your data; SMS text stays on your phone).
 - **Salary**: "What is your monthly salary?", helper "Take-home pay, after tax", big ₹ field, live
   "₹1,00,000" preview. Next disabled until > 0.
 - **Pay day**: grid + "Last day of month"; preview card "Your month: 1 Oct – 31 Oct".
@@ -136,3 +136,5 @@ Edit dialogs: amount dialogs with large ₹ field + Save/Cancel; pay day dialog 
 ## 9. Quality bar (check on the phone)
 Both themes; font scale 1.0 and 1.3; no text clipped; nothing hidden behind the FAB/nav bar/keyboard;
 every icon button has a contentDescription; all copy short and plain.
+
+- Account group (top of Settings, 1.2): avatar initial/name/email, Sync now ("Last synced 2 min ago"), Sign out, Delete my cloud data. Login screen (`ui/LoginScreen.kt`) is shown first: hero gradient, "Continue with Google".

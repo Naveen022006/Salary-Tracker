@@ -3,9 +3,16 @@
 A personal Android app that splits your monthly salary into a **daily spending allowance**, tracks your
 spending **automatically** from bank SMS and payment-app notifications, and shows a **month-end report**.
 
-**Privacy:** everything stays on your phone. The app has **no internet permission**, so Android itself
-stops it from sending any data. Your data is kept in a small database (SQLite) inside the app, and it is
-not included in phone backups.
+**Sign-in and cloud sync (version 1.2):** you sign in with Google (required). Your entries, settings and
+learned categories are saved on the phone first and then copied to your own private cloud account
+([Supabase](https://supabase.com)) in the background whenever there is internet, so you can restore them on a new
+phone or after reinstalling. Only you can see your data (row level security). **The text of your SMS and
+notifications never leaves the phone.** Automatic tracking works offline exactly as before; it syncs later.
+The app data is not included in phone backups.
+
+**Set up the cloud once:** see [`docs/SUPABASE_GOOGLE_SETUP.md`](docs/SUPABASE_GOOGLE_SETUP.md). Then copy
+`supabase.properties.example` to `supabase.properties` (gitignored) and fill in your Supabase URL, anon key and
+Google web client id. Without it the app builds, but the login screen says that cloud sign-in is not set up.
 
 ## Install
 
@@ -18,11 +25,15 @@ The ready-made app file is `SalaryTracker.apk` in this folder.
    adb install -r E:\salary-tracker\SalaryTracker.apk
    ```
 
-3. Open **Salary Tracker** on the phone.
+3. Open **Salary Tracker** on the phone and tap **Continue with Google**. If this phone already had data from
+   an older version, it is uploaded to your account the first time you sign in.
+
+A debug build (`SalaryTracker-debug.apk`, app name "Salary Tracker (debug)") installs next to the real app and
+keeps its own data.
 
 ## First start (setup)
 
-The app asks you, step by step:
+After signing in, the app asks you, step by step (skipped when your account already has a saved setup):
 
 1. **Monthly salary** (the money you get each month).
 2. **Salary day** (1–30, or "Last day of month"). Your "month" runs from that day to the day before the
@@ -58,8 +69,8 @@ and choose **Unrestricted**.
   spending", or delete it. When you change a category, the app can remember it for that shop.
 - **Report**: salary, spent, saved, a category chart, a daily chart (bars = spending, line = allowance),
   days under/over budget, top places and biggest expenses. Use ◀ ▶ to see older months.
-- **Settings**: salary, salary day, savings goal, reminder time, which apps to watch, import SMS,
-  learned categories, delete all data.
+- **Settings**: your account (Sync now, Sign out, Delete my cloud data), salary, salary day, savings goal,
+  reminder time, which apps to watch, import SMS, learned categories, delete all data.
 
 Every evening (default 9:30 PM) the app reminds you: *"Did you spend any cash today?"*.
 Tap it to add cash spending.
@@ -70,11 +81,11 @@ Needs JDK 17 and the Android SDK (already on this PC).
 
 ```bash
 cd E:\salary-tracker
-gradlew.bat testDebugUnitTest assembleRelease
+gradlew.bat testDebugUnitTest assembleRelease assembleDebug
 ```
 
 The signed app is created at `app\build\outputs\apk\release\app-release.apk`. Copy it to
-`SalaryTracker.apk`.
+`SalaryTracker.apk`. The cloud keys are read from `supabase.properties` at build time (never commit that file).
 
 **Signing key:** the key is not in this repository. To sign a release build, make your own key, then
 copy `keystore.properties.example` to `keystore.properties` and fill it in:

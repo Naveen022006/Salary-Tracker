@@ -130,7 +130,7 @@ fun OnboardingScreen(vm: AppViewModel, initial: SettingsEntity) {
             ) { s ->
                 Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     when (s) {
-                        0 -> WelcomeStep()
+                        0 -> WelcomeStep(vm.accountName.collectAsStateWithLifecycle().value.substringBefore(" ").trim())
                         1 -> {
                             StepTitle("What is your monthly salary?", "Take-home pay, after tax")
                             AmountField(salaryText, { salaryText = it }, fontSize = 40.sp)
@@ -178,7 +178,7 @@ fun OnboardingScreen(vm: AppViewModel, initial: SettingsEntity) {
                             }
                         }
                         5 -> {
-                            StepTitle("Import old SMS?", "Fill in past spending from your bank messages. It all stays on this phone.")
+                            StepTitle("Import old SMS?", "Fill in past spending from your bank messages. The message text stays on this phone.")
                             ImportPanel(range, { rangeName = it.name }, importState, perm.sms, actions.askSms)
                         }
                         else -> DoneStep(salary, goal, payDay)
@@ -271,7 +271,7 @@ private fun StepTitle(title: String, helper: String? = null) {
 }
 
 @Composable
-private fun WelcomeStep() {
+private fun WelcomeStep(firstName: String) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Spacer(Modifier.height(8.dp))
         val hero = com.local.salarytracker.ui.theme.AppColors.current
@@ -280,6 +280,9 @@ private fun WelcomeStep() {
             contentAlignment = Alignment.Center,
         ) {
             Text("₹", fontSize = 52.sp, fontWeight = FontWeight.Bold, color = hero.heroAccent)
+        }
+        if (firstName.isNotEmpty()) {
+            Text("Hi $firstName", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
         }
         Text(
             "Know what you can spend today",
@@ -290,7 +293,7 @@ private fun WelcomeStep() {
     }
     Benefit(Icons.Filled.AutoAwesome, "Automatic tracking", "Reads bank SMS and payment alerts for you.")
     Benefit(Icons.Filled.CalendarToday, "Daily budget", "Your salary becomes an amount for each day.")
-    Benefit(Icons.Filled.Lock, "Private", "Stays on this phone. No internet.")
+    Benefit(Icons.Filled.Lock, "Private", "Only you can see your data. SMS text stays on your phone.")
 }
 
 @Composable

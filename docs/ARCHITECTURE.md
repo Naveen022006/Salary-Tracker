@@ -7,7 +7,8 @@ Gradle 9.4.1 (wrapper) / AGP 9.2.1 (built-in Kotlin: do NOT apply `kotlin-androi
 KSP 2.3.12 / Room 2.8.4 / Compose BOM 2026.09.00 (needs **compileSdk 37**; targetSdk 36, minSdk 26) / WorkManager 2.10.5 /
 activity-compose 1.11.0 / navigation-compose 2.9.5 / lifecycle 2.9.4 / coroutines 1.10.2 / JUnit 4.13.2. JDK 17.
 `local.properties` must use forward slashes for sdk.dir. Commands: `gradlew.bat testDebugUnitTest`, `gradlew.bat assembleDebug`.
-Manifest has no INTERNET permission (verified in merged manifest); allowBackup=false + backup rules exclude everything.
+Manifest has the INTERNET permission since 1.2 (Google sign-in + Supabase sync); allowBackup=false + backup rules exclude everything.
+Cloud libs: supabase-kt BOM 3.2.6 (`auth-kt`, `postgrest-kt`), `ktor-client-okhttp` 3.3.1, kotlinx-serialization-json 1.9.0 (+ serialization plugin), androidx.credentials 1.5.0 (+ `credentials-play-services-auth`), googleid 1.1.1; test: sqlite-jdbc.
 WorkManager merges WAKE_LOCK, ACCESS_NETWORK_STATE, RECEIVE_BOOT_COMPLETED, FOREGROUND_SERVICE (harmless).
 
 ## model/Enums.kt
@@ -54,7 +55,7 @@ WorkManager merges WAKE_LOCK, ACCESS_NETWORK_STATE, RECEIVE_BOOT_COMPLETED, FORE
 ## Build / signing
 - `keystore.properties` (root, ignored by git; copy from `keystore.properties.example`) points to `salarytracker.keystore` (alias `salarytracker`). `app/build.gradle.kts` reads it for the `release` signing config. Release has R8 minify + shrinkResources on (`app/proguard-rules.pro` keeps `data.**`, `model.**`, `ReminderWorker`).
 - Build: `gradlew.bat testDebugUnitTest assembleRelease`; output `app/build/outputs/apk/release/app-release.apk`, copied to `E:\salary-tracker\SalaryTracker.apk`. APK is v2-signed (minSdk 26 is fine with v2).
-- Permissions in the APK: READ_SMS, RECEIVE_SMS, POST_NOTIFICATIONS + WorkManager's WAKE_LOCK, ACCESS_NETWORK_STATE, RECEIVE_BOOT_COMPLETED, FOREGROUND_SERVICE. **No INTERNET.** Check: `aapt2 dump permissions SalaryTracker.apk`.
+- Permissions in the APK: READ_SMS, RECEIVE_SMS, POST_NOTIFICATIONS + WorkManager's WAKE_LOCK, ACCESS_NETWORK_STATE, RECEIVE_BOOT_COMPLETED, FOREGROUND_SERVICE. INTERNET (cloud sync). Check: `aapt2 dump permissions SalaryTracker.apk`.
 
 ## Components (package `com.local.salarytracker`)
 - `App` - creates notification channels ("Daily reminder", "New expense"), calls `ReminderScheduler.sync(replace=false)`.
@@ -156,3 +157,25 @@ Spec: `docs/UI_SPEC.md`. History / Report / Settings / Onboarding still have the
 - **Dedupe rules** (`Dedupe.isDuplicate`): MANUAL never merges; both upiRef present -> equal refs; else same type + amount within 10 min when SMS<->NOTIFICATION or NOTIFICATION<->NOTIFICATION (different packages, or the same package's status updates); SMS<->SMS without shared ref stay separate. On merge `MerchantPick.better` keeps the best merchant (real shop/person > VPA/phone number > gateway name > none; ties keep the longer) and the category is upgraded when the merchant improved or the old one was OTHER.
 - **Settings > Apps to watch**: top switch "Find payments in all apps (smart)"; section "Payment apps on this phone" (installed catalog apps with icon, kind label, checkbox, default on); collapsed "Other apps". Settings row value: "Smart mode on · N payment apps" (N = installed and ticked catalog apps).
 - Tests: `PaymentAppsTest` (94: catalog, notification phrasings, must-be-null cases, gateway cleanup, smart rule, dedupe, merchant pick) + 2 new `DedupeTest` cases.
+
+## Cloud: sign-in + sync (1.2; package `cloud/`)
+Server contract (tables `profiles`, `transactions`, `category_rules`, RPCs `server_time`, `delete_my_data`) and setup: `supabase/` and `docs/SUPABASE_GOOGLE_SETUP.md`.
+Room stays the source of truth; the cloud is a background copy. `rawText` is never uploaded (no field for it in `Dtos.kt`); `bodyHash` is.
+
+- `BuildConfig.SUPABASE_URL / SUPABASE_ANON_KEY / GOOGLE_WEB_CLIENT_ID` come from the gitignored root `supabase.properties` (template: `supabase.properties.example`); blank -> `CloudConfig.isConfigured = false`.
+- `Supabase.kt`: `Cloud.client` lazy singleton (Auth with default session storage, Postgrest, OkHttp engine).
+- `GoogleSignIn.kt`: Credential Manager `GetGoogleIdOption` (nonce = SHA-256 hex of a random raw nonce) -> `auth.signInWith(IDToken)`; errors mapped to short messages (`SignInException`).
+- `AccountController.kt` (owned by `AppViewModel.account`): stages `Checking / ConfirmWipe / LoadError / Ready` after the session becomes active.
+  `Prefs.ownerUserId` = account whose data is on the phone. Same owner -> Ready. No owner + local data (existing install) -> **adopt**: mark every row dirty + profile dirty, upload on first sync, one-time note. No owner + empty DB -> first full sync (profile decides whether onboarding is skipped). Different owner -> ask, then wipe DB + per-account prefs and download.
+  Sign out: final push, warns if rows are still dirty, wipes DB (`clearAllTables`) + prefs. Delete cloud data: RPC `delete_my_data`, then wipe + sign out.
+- `AppRoot` (MainScreen.kt): not configured / not signed in -> `LoginScreen`; signed in -> account stage -> onboarding or main.
+- Local rows (`TxnEntity`, `CategoryRuleEntity`) carry `updatedAt`, `deleted` (soft delete, hidden by every DAO query, purged after upload) and `dirty`. `TxnEntity.remoteId` = client UUID (unique). Profile = `SettingsEntity` + Prefs (reminder on/off, smart mode, theme, tracking start); changes set `Prefs.profileDirty`. `Repository` marks rows dirty and calls `SyncScheduler.requestSoon`.
+- `SyncEngine.sync()`: one run at a time (mutex), min 15 s between runs, after HTTP 429 blocked 60 s. Order: `server_time` (clock skew) -> pull profile/transactions/rules (`updated_at >= cursor`, ordered, pages of 500, cursor per account in Prefs) -> push profile, dirty txns (batches of 100, upsert on `id`), rules (upsert on `user_id,keyword`) -> purge synced soft deletes. A row the server rejects is skipped (one-by-one retry); a `body_hash` unique clash triggers a full re-pull, which keeps the cloud copy.
+- `Merge.kt`: pure last-write-wins (`decide`, `decideTxn`), remote wins ties, phone times shifted by the clock skew. Tested in `MergeTest`.
+- `SyncWorker.kt` / `SyncScheduler`: WorkManager, `NetworkType.CONNECTED`, exponential back-off from 30 s. Debounced one-time sync 20 s after the last local change (unique `sync_debounced`: REPLACE, or APPEND_OR_REPLACE while a sync runs), periodic every 6 h (`sync_periodic`), on app open if the last sync is older than 5 min, "Sync now" in Settings. Status for the UI: `SyncStatus.ui` / `lastSynced`.
+
+### Room migration v1 -> v2
+`data/Migrations.kt` (`MigrationSql.V1_TO_V2`, `MIGRATION_1_2`), no destructive fallback. `txn` gets `remoteId TEXT NOT NULL DEFAULT ''` (backfilled with `lower(hex(randomblob))` v4 UUIDs, then a unique index), `updatedAt` (= createdAt), `deleted` 0, `dirty` 1; `category_rule` gets `updatedAt` (= now), `deleted` 0, `dirty` 1. Everything starts dirty so existing data uploads on first sign-in. `MigrationSqlTest` runs the SQL on a real SQLite (sqlite-jdbc) and compares the columns with the exported `schemas/.../2.json`.
+
+### Build variants
+Debug: `applicationIdSuffix ".debug"`, app name "Salary Tracker (debug)" (`src/debug/res`), so it installs beside the real app. R8 keep rules for serialization/Ktor/supabase-kt are in `proguard-rules.pro`.

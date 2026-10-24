@@ -23,6 +23,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
+import com.local.salarytracker.cloud.SyncStatus
+import com.local.salarytracker.cloud.SyncUi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -141,15 +153,26 @@ private suspend fun loadWatchablePackages(ctx: Context): Set<String> = withConte
         .toSet()
 }
 
+/** "just now", "2 min ago", "3 h ago", "2 days ago". */
+private fun agoText(ms: Long): String {
+    val min = (ms / 60_000L).coerceAtLeast(0)
+    return when {
+        min < 1 -> "just now"
+        min < 60 -> "$min min ago"
+        min < 24 * 60 -> "${min / 60} h ago"
+        else -> "${min / (24 * 60)} day${if (min / (24 * 60) == 1L) "" else "s"} ago"
+    }
+}
+
 private fun ordinal(n: Int): String {
     val suffix = if (n % 100 in 11..13) "th" else when (n % 10) { 1 -> "st"; 2 -> "nd"; 3 -> "rd"; else -> "th" }
     return "$n$suffix"
 }
 
 private fun appVersion(ctx: Context): String = try {
-    ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "1.1"
+    ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "1.2"
 } catch (_: Exception) {
-    "1.1"
+    "1.2"
 }
 
 @Composable
@@ -167,6 +190,17 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
     var reminderOn by remember { mutableStateOf(Prefs.reminderEnabled(ctx)) }
     var dialog by rememberSaveable { mutableStateOf<String?>(null) }
     var smart by remember { mutableStateOf(Prefs.smartDetect(ctx)) }
+    val accountName = vm.accountName.collectAsStateWithLifecycle().value
+    val accountEmail = vm.accountEmail.collectAsStateWithLifecycle().value
+    val syncUi = SyncStatus.ui.collectAsStateWithLifecycle().value
+    val lastSynced = SyncStatus.lastSynced.collectAsStateWithLifecycle().value.let { if (it > 0L) it else Prefs.lastSyncMs(ctx) }
+    // Re-draw "2 min ago" every 30 seconds.
+    val nowMs by produceState(System.currentTimeMillis()) {
+        while (true) { delay(30_000); value = System.currentTimeMillis() }
+    }
+    val scope = rememberCoroutineScope()
+    var pendingCount by remember { mutableIntStateOf(0) }
+    var busy by remember { mutableStateOf(false) }
 
     LazyColumn(
         contentPadding = PaddingValues(
@@ -176,6 +210,50 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
         ),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
+        item {
+            Group("Account") {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val initial = (accountName.ifBlank { accountEmail }).trim().firstOrNull()?.uppercase() ?: "?"
+                    Box(
+                        Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) { Text(initial, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onPrimaryContainer) }
+                    Spacer(Modifier.width(16.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(accountName.ifBlank { "Signed in" }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (accountEmail.isNotBlank()) {
+                            Text(accountEmail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+                Divider()
+                SettingRow(
+                    Icons.Filled.CloudSync, "Sync now",
+                    value = when (syncUi) {
+                        SyncUi.Syncing -> "Syncing..."
+                        is SyncUi.Problem -> syncUi.text
+                        SyncUi.Idle -> if (lastSynced <= 0L) "Not synced yet" else "Last synced " + agoText(nowMs - lastSynced)
+                    },
+                    onClick = { if (syncUi != SyncUi.Syncing) vm.syncNow() },
+                    trailing = if (syncUi == SyncUi.Syncing) {
+                        { CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp) }
+                    } else null,
+                )
+                Divider()
+                SettingRow(
+                    Icons.AutoMirrored.Filled.Logout, "Sign out",
+                    value = "Your data stays safe in your account.",
+                    onClick = { dialog = "signout" },
+                )
+                Divider()
+                SettingRow(
+                    Icons.Filled.DeleteForever, "Delete my cloud data", danger = true,
+                    value = "Erases your account data from the cloud, then signs out.",
+                    onClick = { dialog = "clouddel1" },
+                )
+            }
+        }
+
         item {
             Group("Salary & budget") {
                 SettingRow(Icons.Filled.Payments, "Monthly salary", value = Money.formatWhole(s.salaryPaise), onClick = { dialog = "salary" })
@@ -307,7 +385,7 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
                     ) { Icon(Icons.Filled.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp)) }
                     Spacer(Modifier.width(16.dp))
                     Text(
-                        "All your data stays on this phone. This app has no internet permission, so it cannot send anything out. It does not back up to the cloud. Uninstalling the app deletes everything.",
+                        "Your data is saved on this phone and in your private cloud account (Supabase). Only you can see it. The text of your SMS and notifications never leaves this phone.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -319,7 +397,7 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
             Group("Danger zone", titleColor = AppColors.current.danger) {
                 SettingRow(
                     Icons.Filled.DeleteForever, "Delete all data", danger = true,
-                    value = "Removes all entries and learned categories.",
+                    value = "Removes all entries and learned categories, here and in your account.",
                     onClick = { dialog = "delete1" },
                 )
             }
@@ -327,7 +405,7 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
 
         item {
             Text(
-                "Salary Tracker ${appVersion(ctx)} · Works fully offline",
+                "Salary Tracker ${appVersion(ctx)}",
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodySmall,
@@ -344,10 +422,61 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
         "apps" -> AppsPage(s, smart, { on -> smart = on; Prefs.setSmartDetect(ctx, on) }, close) { csv -> vm.updateSettings { it.copy(allowedPackages = csv) } }
         "rules" -> RulesPage(vm, close)
         "import" -> ImportSheet(vm, perm.sms, actions.askSms, close)
+        "signout" -> AlertDialog(
+            onDismissRequest = { if (!busy) dialog = null },
+            title = { Text("Sign out?") },
+            text = { Text("Your data stays safe in your account. It will be removed from this phone.") },
+            confirmButton = {
+                TextButton(enabled = !busy, onClick = {
+                    busy = true
+                    scope.launch {
+                        val n = vm.account.signOut(force = false)
+                        busy = false
+                        if (n > 0) { pendingCount = n; dialog = "signoutForce" } else dialog = null
+                    }
+                }) { Text(if (busy) "Saving..." else "Sign out", color = AppColors.current.danger) }
+            },
+            dismissButton = { TextButton(enabled = !busy, onClick = close) { Text("Cancel") } },
+        )
+        "signoutForce" -> AlertDialog(
+            onDismissRequest = close,
+            title = { Text("Changes not uploaded") },
+            text = { Text("$pendingCount change${if (pendingCount == 1) " is" else "s are"} not uploaded yet. Sign out anyway?") },
+            confirmButton = {
+                TextButton(onClick = { dialog = null; scope.launch { vm.account.signOut(force = true) } }) {
+                    Text("Sign out anyway", color = AppColors.current.danger)
+                }
+            },
+            dismissButton = { TextButton(onClick = close) { Text("Stay signed in") } },
+        )
+        "clouddel1" -> AlertDialog(
+            onDismissRequest = close,
+            title = { Text("Delete my cloud data?") },
+            text = { Text("Everything saved in your account (entries, settings, learned categories) will be erased. You will be signed out and the copy on this phone is removed too.") },
+            confirmButton = { TextButton(onClick = { dialog = "clouddel2" }) { Text("Continue", color = AppColors.current.danger) } },
+            dismissButton = { TextButton(onClick = close) { Text("Cancel") } },
+        )
+        "clouddel2" -> AlertDialog(
+            onDismissRequest = { if (!busy) dialog = null },
+            title = { Text("Are you really sure?") },
+            text = { Text("This cannot be undone.") },
+            confirmButton = {
+                TextButton(enabled = !busy, onClick = {
+                    busy = true
+                    scope.launch {
+                        val err = vm.account.deleteCloudData()
+                        busy = false
+                        dialog = null
+                        if (err != null) vm.messages.tryEmit(UiMessage(err))
+                    }
+                }) { Text(if (busy) "Deleting..." else "Yes, delete everything", color = AppColors.current.danger) }
+            },
+            dismissButton = { TextButton(enabled = !busy, onClick = close) { Text("No, keep my data") } },
+        )
         "delete1" -> AlertDialog(
             onDismissRequest = close,
             title = { Text("Delete all data?") },
-            text = { Text("All entries and learned categories will be removed from this phone.") },
+            text = { Text("All entries and learned categories will be removed from this phone and from your cloud account.") },
             confirmButton = { TextButton(onClick = { dialog = "delete2" }) { Text("Continue", color = AppColors.current.danger) } },
             dismissButton = { TextButton(onClick = close) { Text("Cancel") } },
         )

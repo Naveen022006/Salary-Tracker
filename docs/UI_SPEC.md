@@ -133,6 +133,20 @@ Edit dialogs: amount dialogs with large ₹ field + Save/Cancel; pay day dialog 
 - **Import**: range as selectable cards; LinearProgressIndicator while importing; result card.
 - **Done**: summary card "Your daily budget: ₹2,581", "Open my budget".
 
+## 8b. Ask tab (1.4)
+Bottom bar: Today · History · Lending · Report · **Ask** (AutoAwesome icon) · Settings.
+- Top bar "Ask": ⚙ (Ask settings sheet) and ⋮ (Clear chat, with confirm).
+- Warnings on top (InfoBanner, Warning / Danger): limits at 80% / over, unusual spending (max 3).
+- Chat: bot bubbles = small saffron AutoAwesome mark + SectionCard (surfaceContainerLow) with text and rich rows
+  (label/value rows with tabular money, CategoryIcon lines, tips with a bulb, people with PersonAvatar, bills,
+  "Other" entries with one-tap category chips, outlined action buttons). User bubbles: primaryContainer, right side.
+  AI answers carry a caption "AI answer · N left today". "Thinking…" dots while the AI answers.
+- Above the input: one scrolling row of suggestion chips (from the last answer, else the 12 default questions).
+- Input: rounded text field + filled Send button, sits above the keyboard (imePadding; the main Box consumes the
+  bottom-bar insets).
+- Settings sheet: AI answers switch (consent dialog first time, with "See what is sent"), Spending alerts,
+  Weekly and monthly check-in, Monthly limits list (+ Add a limit dialog: category chips + amount), privacy note.
+
 ## 9. Quality bar (check on the phone)
 Both themes; font scale 1.0 and 1.3; no text clipped; nothing hidden behind the FAB/nav bar/keyboard;
 every icon button has a contentDescription; all copy short and plain.

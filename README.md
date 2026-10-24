@@ -70,6 +70,7 @@ and choose **Unrestricted**.
 - **Lending**: people you lend to or borrow from, with balances and return dates.
 - **Report**: salary, spent, saved, a category chart, a daily chart (bars = spending, line = allowance),
   days under/over budget, top places and biggest expenses. Use ◀ ▶ to see older months.
+- **Ask**: a money helper you can chat with (see below).
 - **Settings**: your account (Sync now, Sign out, Delete my cloud data), salary, salary day, savings goal,
   reminder time, which apps to watch, import SMS, learned categories, delete all data.
 
@@ -113,6 +114,33 @@ internet", and they are uploaded as soon as the phone is online again.
 Payment apps (GPay, PhonePe...) are different: if you *mute* their alerts (silent) they can still be read, but if you
 turn their notifications *completely off*, no app can read them. Your bank SMS still covers those payments.
 
+## Ask: your money helper (version 1.4)
+
+The **Ask** tab (next to Settings) answers questions about your money. Tap a question or type your own:
+
+- "Can I spend today?", "Where did my money go last month?", "How much can I spend on food this week?"
+- **Saving tips** made from your own spending.
+- **Anything unusual?** A category, a day or a payment that is much higher than normal for you.
+- **Plan a purchase**: "Can I buy a phone for ₹15,000?" shows how your daily budget changes, how many days you need
+  to save for it, or what it does to next month.
+- **Who owes me?** and "Does Ramesh owe me?" (from the Lending tab).
+- **Bills & subscriptions**: payments that repeat every month or week, with the next expected date.
+- **Fix my entries**: entries in "Other" with a suggested category. One tap fixes it and the app remembers the shop.
+- **Limits**: "Keep food under ₹6,000". Ask warns you at 80% and when you go over (also as a notification right after
+  a new expense). Change limits with the ⚙ button in Ask.
+- **Check-ins**: every Sunday at 7 PM "Your week", and at 7 PM on the last day of your month "Your month".
+
+**Private by default.** All these answers are made on your phone, work offline and cost nothing. The chat and your
+limits are kept only on this phone (not in the cloud). "Clear chat" is in the ⋮ menu.
+
+**AI answers (optional, off by default).** In Ask → ⚙ you can turn on AI answers. Then a question the app can't answer
+goes to Claude AI (by Anthropic) through your own Supabase account. Before it turns on, the app shows exactly what is sent
+(tap "See what is sent"): your question and a summary of numbers like salary, budget, totals per category, limits and
+lending totals. **Never sent:** SMS or notification text, names of people, phone numbers, UPI ids, account numbers,
+notes, or shop names other than big brands (like Swiggy or Amazon). Names of people you saved in Lending are replaced
+with "a friend" even if you type them. Up to 30 AI questions a day. Setup (once): see step I in
+[`docs/SUPABASE_GOOGLE_SETUP.md`](docs/SUPABASE_GOOGLE_SETUP.md). The API key stays in Supabase; it is never in the app.
+
 ## Build from source (PC)
 
 Needs JDK 17 and the Android SDK (already on this PC).
@@ -144,3 +172,5 @@ adb shell "am broadcast -n com.local.salarytracker/.capture.TestReceiver -a com.
 ```
 
 Only adb can send these test messages. Other apps can't.
+
+Ask check-in now (also saved in the chat): `adb shell "am broadcast -n com.local.salarytracker/.capture.TestReceiver -a com.local.salarytracker.TEST_CHECKIN --es kind weekly"` (or `monthly`).

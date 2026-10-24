@@ -45,6 +45,8 @@ class App : Application() {
         Notifier.createChannels(this)
         ReminderScheduler.sync(this, replace = false)
         com.local.salarytracker.work.LoanDueScheduler.sync(this)
+        com.local.salarytracker.work.AssistantNotifier.createChannel(this)
+        com.local.salarytracker.work.AssistantScheduler.sync(this)
         mergeCatalogIntoWatchList()
         com.local.salarytracker.cloud.SyncScheduler.ensurePeriodic(this)
         com.local.salarytracker.cloud.Connectivity.register(this) // sync + SMS catch-up as soon as internet is back

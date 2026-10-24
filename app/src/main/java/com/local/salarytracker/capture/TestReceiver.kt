@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
  *   goes through the same allowed-list / smart-mode logic as real notifications (any package works in smart mode).
  * TEST_REMINDER: runs the daily reminder worker now.
  * TEST_LOAN_DUE: runs the money-return reminder worker now (notifications for lending entries due today or late).
+ * TEST_CHECKIN: --es kind weekly|monthly posts an Ask check-in now (also saved in the chat), even when switched off.
  * TEST_DELETE: --el id N (delete that txn) or --es merchantPrefix P --el sinceMillis MS (delete txns created at/after MS
  *   whose merchant starts with P, case-insensitive). Logs the number deleted.
  */
@@ -27,6 +28,12 @@ class TestReceiver : BroadcastReceiver() {
         if (action == ACTION_REMINDER) {
             ReminderScheduler.runNow(app)
             Capture.log("TEST_REMINDER: worker enqueued")
+            return
+        }
+        if (action == ACTION_CHECK_IN) {
+            val kind = if (intent.getStringExtra("kind") == "monthly") "monthly" else "weekly"
+            com.local.salarytracker.work.AssistantScheduler.runNow(app, kind)
+            Capture.log("TEST_CHECKIN: $kind worker enqueued")
             return
         }
         if (action == ACTION_LOAN_DUE) {
@@ -73,6 +80,7 @@ class TestReceiver : BroadcastReceiver() {
         const val ACTION_NOTIF = "com.local.salarytracker.TEST_NOTIF"
         const val ACTION_DELETE = "com.local.salarytracker.TEST_DELETE"
         const val ACTION_LOAN_DUE = "com.local.salarytracker.TEST_LOAN_DUE"
+        const val ACTION_CHECK_IN = "com.local.salarytracker.TEST_CHECKIN"
         const val ACTION_REMINDER = "com.local.salarytracker.TEST_REMINDER"
     }
 }

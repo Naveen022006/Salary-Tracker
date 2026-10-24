@@ -57,6 +57,7 @@
                 <action android:name="com.local.salarytracker.TEST_NOTIF" />
                 <action android:name="com.local.salarytracker.TEST_REMINDER" />
                 <action android:name="com.local.salarytracker.TEST_LOAN_DUE" />
+                <action android:name="com.local.salarytracker.TEST_CHECKIN" />
             </intent-filter>
         </receiver>
 

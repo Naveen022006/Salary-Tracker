@@ -126,6 +126,34 @@ Note: an upsert of a row that already exists counts as 2 writes (one insert atte
 - **Google says "access blocked" / app not verified**: the consent screen is in Testing mode. Add your Gmail under **Test users**, or publish the app.
 - **Sign-in works but no data syncs**: run `supabase/tests/rls_check.sql` and check the tables exist.
 
+## I. AI answers in the Ask tab (optional)
+
+The Ask tab works without this. Do it only if you want AI answers for questions the app can't answer itself.
+The Anthropic API key goes ONLY into Supabase secrets. Never put it in the app, in `supabase.properties` or on GitHub.
+
+1. **Anthropic console** (https://console.anthropic.com): sign in, add a little credit, and under **Limits** set a
+   **monthly spend limit** (for example $5). Create an API key (Settings -> API keys). Copy it once; keep it secret.
+2. **Database**: Supabase -> SQL Editor -> paste `supabase/migrations/0004_assistant.sql` -> **Run**. It adds the
+   limits: 5 AI questions per minute and 30 per day for each user, 500 per day for all users together.
+3. **Secret**: Supabase -> **Edge Functions -> Secrets** -> **Add new secret**: name `ANTHROPIC_API_KEY`, value = your key.
+   Type or paste it yourself here, nowhere else.
+4. **Function**: Supabase -> **Edge Functions -> Deploy a new function -> Via editor**. Name it exactly `assistant`.
+   Replace the example code with the full content of `supabase/functions/assistant/index.ts` and click **Deploy**.
+   Keep **Verify JWT** turned ON (only signed-in users can call it).
+   (Or with the Supabase CLI: `npx supabase functions deploy assistant`.)
+5. **Check**: run checks 11 and 12 of `supabase/tests/rls_check.sql`. Then in the app: Ask -> ⚙ -> turn on
+   **AI answers**, read the note, tap **Turn on**, and ask something like "Is my spending OK this month?".
+
+Model: Claude Haiku 5.5 (`claude-haiku-5-5`, $0.10 per million input tokens, $0.50 per million output tokens).
+One question costs about ₹0.05, so 30 questions a day is at most about ₹45 a month. See the real use with
+`select * from private.ai_usage order by day desc;` in the SQL Editor.
+
+If something is wrong, the app says so in the chat:
+- "AI answers are not set up yet (the "assistant" function is missing in Supabase)": step 4 not done, or the name is wrong.
+- "... (the API key is missing in Supabase)": step 3 not done, or the key is wrong / out of credit.
+- "You have used today's 30 AI questions": the daily limit; it resets at midnight (India time).
+- Any other error: Supabase -> Edge Functions -> assistant -> **Logs**.
+
 ## H. Your data
 
 Stored in the cloud (your own Supabase project, protected by row level security so each user sees only their own rows):
@@ -135,6 +163,10 @@ Stored in the cloud (your own Supabase project, protected by row level security 
 - Category rules: keyword and category.
 - Lending (needs 0003): people (name, optional phone, note) and lending entries (who, gave / got back / borrowed / paid back, amount, cash / UPI / bank / card / other, payment app name such as GPay, date, optional return-by date, note).
 - Your Google account id and email (kept by Supabase Auth).
+
+**Ask tab:** the chat and the category limits stay on the phone. With AI answers on, each AI question sends your
+question and a summary of numbers to the `assistant` function, which passes them to Anthropic (not stored in your
+database). Stored in the database only: a count of AI questions and tokens per day (`private.ai_usage`).
 
 **Never uploaded:** the original SMS text and notification text. Only the hash, which cannot be turned back into text.
 

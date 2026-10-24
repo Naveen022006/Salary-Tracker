@@ -17,3 +17,12 @@ build/
 
 # Cloud keys (Supabase URL, anon key, Google web client id): never commit
 supabase.properties
+
+# Secrets for the Ask tab AI (Anthropic API key) live only in Supabase -> Edge Functions -> Secrets.
+# If the Supabase CLI is ever used, its local env files and caches must never be committed either.
+.env
+.env.*
+supabase/.env
+supabase/functions/.env
+supabase/.temp/
+supabase/.branches/

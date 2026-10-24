@@ -84,6 +84,10 @@ class MainActivity : ComponentActivity() {
             vm.tab.value = 3
             i.removeExtra(Extras.OPEN_REPORT)
         }
+        if (i.getBooleanExtra(Extras.OPEN_ASK, false)) {
+            vm.tab.value = 4
+            i.removeExtra(Extras.OPEN_ASK)
+        }
         i.getStringExtra(Extras.LOAN_PERSON_ID)?.takeIf { it.isNotEmpty() }?.let {
             vm.openLoanPerson(it)
             i.removeExtra(Extras.LOAN_PERSON_ID)

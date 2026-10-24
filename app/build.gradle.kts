@@ -23,8 +23,8 @@ android {
         applicationId = "com.local.salarytracker"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.3"
+        versionCode = 5
+        versionName = "1.4"
         buildConfigField("String", "SUPABASE_URL", cloudField("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_ANON_KEY", cloudField("SUPABASE_ANON_KEY"))
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", cloudField("GOOGLE_WEB_CLIENT_ID"))
@@ -99,6 +99,7 @@ dependencies {
     implementation(platform(libs.supabase.bom))
     implementation(libs.supabase.auth)
     implementation(libs.supabase.postgrest)
+    implementation(libs.supabase.functions)
     implementation(libs.ktor.client.okhttp)
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play)

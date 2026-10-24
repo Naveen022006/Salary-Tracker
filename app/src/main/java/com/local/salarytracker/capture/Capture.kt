@@ -77,6 +77,11 @@ object Capture {
             val left = BudgetService.snapshotNow(ctx, repo, repo.getSettings()).leftTodayPaise
             Notifier.showCapture(ctx, e, left)
         }
+        try {
+            com.local.salarytracker.work.AssistantNotifier.afterCapture(ctx, e) // limit / unusual-spending alerts (Ask tab)
+        } catch (t: Throwable) {
+            Log.w(TAG, "assistant alert failed", t)
+        }
         return "saved #${e.id} ${e.type} ${Money.format(e.amountPaise)} merchant=${e.merchant} category=${e.category} excluded=${e.excluded}"
     }
 

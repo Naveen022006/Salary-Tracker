@@ -185,6 +185,42 @@ class MigrationSqlTest {
         assertTrue(indexNames().containsAll(listOf("index_person_remoteId", "index_loan_entry_remoteId", "index_loan_entry_personRemoteId")))
     }
 
+    // ------------------------------------------------------------ v3 -> v4 (Ask tab)
+    private val v3Tables = listOf("txn", "category_rule", "settings", "person", "loan_entry")
+
+    @Test fun v3DataSurvivesTheAssistantMigration() {
+        v3Tables.forEach { t -> createSql(3, t).forEach(::exec) }
+        exec("INSERT INTO txn (amountPaise,type,timestamp,category,source,excluded,createdAt,remoteId,updatedAt,deleted,dirty) VALUES (500,'DEBIT',3000,'FOOD','MANUAL',0,3333,'r-2',3333,0,0)")
+        exec("INSERT INTO person (remoteId,name,createdAt,updatedAt,deleted,dirty) VALUES ('p-1','Ramesh',1,1,0,0)")
+
+        MigrationSql.V3_TO_V4.forEach(::exec)
+        MigrationSql.V3_TO_V4.forEach(::exec) // IF NOT EXISTS: running twice must not fail
+
+        assertEquals(1, count("txn"))
+        assertEquals(1, count("person"))
+        exec("INSERT INTO assistant_message (fromUser,text,source,createdAt) VALUES (1,'hi','RULES',1)")
+        exec("INSERT INTO category_limit (category,limitPaise,updatedAt) VALUES ('FOOD',600000,1)")
+        val dup = runCatching { exec("INSERT INTO category_limit (category,limitPaise,updatedAt) VALUES ('FOOD',1,1)") }
+        assertTrue("one limit per category", dup.isFailure)
+    }
+
+    @Test fun migratedAssistantTablesMatchRoomsExportedV4Schema() {
+        v3Tables.forEach { t -> createSql(3, t).forEach(::exec) }
+        MigrationSql.V3_TO_V4.forEach(::exec)
+        val tables = v3Tables + listOf("assistant_message", "category_limit")
+        val migrated = tables.associateWith { columns(it) }
+        val migratedIndexes = indexNames()
+
+        db.close()
+        db = DriverManager.getConnection("jdbc:sqlite::memory:")
+        tables.forEach { t -> createSql(4, t).forEach(::exec) }
+        for (t in tables) {
+            assertEquals("columns of $t", columns(t).sortedBy { it.name }, migrated.getValue(t).sortedBy { it.name })
+        }
+        assertEquals("indices", indexNames(), migratedIndexes)
+        assertTrue(indexNames().contains("index_assistant_message_createdAt"))
+    }
+
     private fun indexNames(): List<String> = db.createStatement().use { st ->
         st.executeQuery("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'index_%' ORDER BY name").use { rs ->
             buildList { while (rs.next()) add(rs.getString(1)) }

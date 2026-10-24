@@ -10,8 +10,9 @@ import androidx.room.TypeConverters
     entities = [
         TxnEntity::class, CategoryRuleEntity::class, SettingsEntity::class,
         PersonEntity::class, LoanEntryEntity::class,
+        AssistantMessageEntity::class, CategoryLimitEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -21,6 +22,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun ruleDao(): RuleDao
     abstract fun personDao(): PersonDao
     abstract fun loanDao(): LoanEntryDao
+    abstract fun assistantDao(): AssistantDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null
@@ -33,7 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
             instance ?: synchronized(this) {
                 appContext = context.applicationContext
                 instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "salary_tracker.db")
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3) // never a destructive fallback: the data is real
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4) // never a destructive fallback: the data is real
                     .build().also { instance = it }
             }
     }

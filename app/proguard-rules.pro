@@ -26,3 +26,12 @@
 -dontwarn java.lang.management.**
 -dontwarn javax.naming.**
 -dontwarn org.codehaus.mojo.animal_sniffer.**
+
+# ---- Ask tab (assistant): chat replies are stored as JSON (sealed ReplyItem), worker created by WorkManager ----
+-keep,includedescriptorclasses class com.local.salarytracker.assistant.**$$serializer { *; }
+-keepclassmembers class com.local.salarytracker.assistant.** {
+    *** Companion;
+    kotlinx.serialization.KSerializer serializer(...);
+}
+-keepclasseswithmembers class com.local.salarytracker.assistant.** { kotlinx.serialization.KSerializer serializer(...); }
+-keep class com.local.salarytracker.work.AssistantWorker { *; }

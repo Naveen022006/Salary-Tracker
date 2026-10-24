@@ -238,3 +238,61 @@ Primary: `ActivityResultContracts.StartActivityForResult` with `Intent(ACTION_PI
 
 ## Notification catch-up
 `PaymentNotificationListener.onListenerConnected()` passes every `activeNotifications` entry through the same `handle(sbn)` filters/capture path as `onNotificationPosted`, using `sbn.postTime`. Repeats are safe: the same post time + text gives the same `Dedupe.bodyHash` (5-minute bucket, unique column) and cross-source `Dedupe.isDuplicate` merges the rest (`RepeatedNotificationHashTest`). Logs "Listener connected: sent N of M active notifications" to tag SalaryTracker.
+
+---
+
+# v1.4 Ask tab (smart spending assistant) - version 1.4 (code 5)
+
+Rules on the phone answer everything they understand (free, offline, private); only questions they don't understand go
+to an AI (Claude Haiku 5.5) and only when the user turned "AI answers" on after a consent dialog.
+
+## Pure logic (`assistant/`, no Android imports, `AssistantTest`)
+- `AssistantModels.kt`: `Reply(text, items, chips)` (kotlinx-serializable, stored as JSON in the chat), `ReplyItem`
+  (`Stat`, `CategoryLine`, `EntryFix`, `Person`, `Bill`, `Warning`, `Tip`, `Action(kind = OPEN_HISTORY / OPEN_REPORT /
+  OPEN_LENDING / OPEN_SETTINGS / SET_LIMIT / ASK_AI / SEND)`), `Effect.SetLimit`, `TxnLite`, `AssistantData` (settings,
+  entries of the current pay month + 3 before (>= 90 days), limits, `PersonBalance`s, learned rules).
+- `IntentParser.parse(text)`: whole-word keyword matching -> `Intent` + category (synonyms incl. brands), `TimeRange`
+  (today / yesterday / this or last week (Mon-Sun) / this or last month (= pay period) / last N days) and amount
+  ("₹15,000", "15k", "1.5 lakh"; day counts skipped).
+- `Insights`: `dates`, `previousOf`, `usualShare` (category share of day-to-day spending, 60 days), `limitStatus`,
+  `unusual` (category >= 1.5x and +₹500 vs the same days of up to 3 earlier months, or >= ₹2,000 where usually nothing;
+  day > 2x base daily in the last 14 days; entry >= 3x the category median of 90 days, needs 5 entries),
+  `planPurchase` (YES / TIGHT / NO, daily budget before/after, save 20% of a normal day, next-month option),
+  `recurring` (same cleaned merchant, amount within 10% of the latest, trailing gaps 25-35 days or 6-8 days),
+  `entriesToFix` (OTHER entries of 60 days; suggestion from the same shop's other entries, else `Categorizer`).
+- `AssistantEngine.answer(question, data, aiEnabled)`: `Answer(reply, effect)`, or null = "ask the AI" (UNKNOWN with AI
+  on). `headsUp` (top warnings), `limitWarnings`, `tips`, `welcome`, chip texts (`CHIP_*`, all mapped by the parser).
+- `CheckIn.weekly` (Mon-today; on Monday last week) / `monthly(previous)`. `AssistantEngine.nextMonth` answers
+  "next month" questions (salary - savings goal over the next pay month's days).
+- `AiContext.build(data)`: the ONLY data sent to the AI: whole-rupee numbers (money, categories this / last month, this
+  week, last 7 days, limits, unusual (no shop), bills (brand or category name), top shops (only `PaymentApps` brands),
+  lending totals and counts, number of "Other" entries, `month.next` = next pay month's dates, budget, daily budget). `KEYS` must match the Edge Function. `scrub(text, names)`
+  replaces e-mails / UPI ids, 9+ digit numbers and the names of Lending people ("a friend").
+
+## Phone side
+- Room v4 (`MIGRATION_3_4`, additive): `assistant_message` (fromUser, text, payload = Reply JSON, source RULES / AI /
+  CHECK_IN / ERROR, createdAt; trimmed to 200) and `category_limit` (category PK, limitPaise). Local only, not synced;
+  `clearAllTables` (sign-out / account switch) and "Delete all data" clear them. `MigrationSqlTest` checks v3 -> v4.
+- `assistant/AssistantStore` (load data, chat, limits, `fixCategory` = `Repository.setCategory(remember = true)`),
+  `assistant/AssistantPrefs` (own prefs file "assistant": aiEnabled + consent time, AI left today, alerts, check-ins,
+  alerted keys; cleared on account wipe).
+- `cloud/AssistantApi.ask(question, history, context)`: `functions-kt` `invoke("assistant")` (the user's JWT is
+  added by the client). Errors -> plain messages (429 minute / day / global, 401, 404 not deployed, 503 key missing,
+  offline). Only complete AI question/answer pairs (max 6 turns) are sent as history; user turns are scrubbed again.
+- UI: `ui/AssistantScreen.kt` (`AssistantTab`, tab index 4 in `MainScreen`; Settings moved to 5), `ui/AssistantViewModel`
+  (own AndroidViewModel). `MainScreen` consumes the bottom-bar insets so `imePadding` of the input is correct.
+- Alerts / check-ins (`work/AssistantWorker.kt`): channel `assistant`; `AssistantNotifier.afterCapture` is called from
+  `Capture.store` after every saved expense (limit 80% / 100% once per category per pay month, a much bigger than usual
+  payment at most once a day); `AssistantWorker` daily at 19:00 (unique periodic `assistant_check_in`): weekly check-in
+  on Sunday, monthly on the last day of the pay month; both are also saved into the chat. Tap -> `Extras.OPEN_ASK`.
+  Test hook: `TEST_CHECKIN --es kind weekly|monthly`.
+
+## Server (`supabase/`)
+- `migrations/0004_assistant.sql`: `public.ai_take_quota()` (5 / minute via `private.rate_limits`, 30 / India day per user
+  in `private.ai_usage`, 500 / day for everyone in `private.ai_global`; PT429 with hint minute / day / global; returns
+  questions left), `public.ai_record_usage(input, output)`; grants to `authenticated` only.
+- `functions/assistant/index.ts` (Deno, `npm:@anthropic-ai/sdk@0.133.0`, `npm:@supabase/supabase-js@2.117.0`):
+  Verify JWT on; body <= 20 KB, question <= 500, history <= 6 x 1,000, context <= 8 KB with known top-level keys only
+  and no long digit runs / "@" / long strings; quota RPC as the user; `messages.create` model `claude-haiku-5-5`,
+  `max_tokens` 1500, `output_config.effort` low, no sampling params; refusal -> polite answer. Secret `ANTHROPIC_API_KEY`.
+  Type-checked with `npx deno@2.5.4 check`. Setup: `docs/SUPABASE_GOOGLE_SETUP.md` step I.

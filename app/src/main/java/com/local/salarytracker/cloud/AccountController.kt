@@ -231,6 +231,7 @@ class AccountController(
             val name = Prefs.accountName(app)
             val email = Prefs.accountEmail(app)
             Prefs.clearAccountData(app)
+            com.local.salarytracker.assistant.AssistantPrefs.clear(app) // Ask tab switches and AI consent belong to the account
             // keep who is signing in until the session itself ends (used by the login hand-over)
             if (name.isNotEmpty() || email.isNotEmpty()) Prefs.setAccount(app, name, email)
         }

@@ -127,4 +127,6 @@ object Extras {
     const val TXN_ID = "txn_id"
     /** remoteId of the person to open in the Lending tab (money reminder tap). */
     const val LOAN_PERSON_ID = "loan_person_id"
+    /** Open the Ask tab (check-in / alert tap). */
+    const val OPEN_ASK = "open_ask"
 }

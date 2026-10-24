@@ -363,6 +363,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             repo.deleteAllTxns()
             repo.deleteAllRules()
             repo.deleteAllLending()
+            com.local.salarytracker.assistant.AssistantStore(getApplication()).clearAll()
             onDone()
         }
     }

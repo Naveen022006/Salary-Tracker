@@ -43,6 +43,15 @@ object MigrationSql {
         "CREATE UNIQUE INDEX IF NOT EXISTS `index_loan_entry_remoteId` ON `loan_entry` (`remoteId`)",
         "CREATE INDEX IF NOT EXISTS `index_loan_entry_personRemoteId` ON `loan_entry` (`personRemoteId`)",
     )
+
+    /** v3 -> v4 (Ask tab): chat history and category limits. Only new tables; both stay on the phone. */
+    val V3_TO_V4: List<String> = listOf(
+        "CREATE TABLE IF NOT EXISTS `assistant_message` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+            "`fromUser` INTEGER NOT NULL, `text` TEXT NOT NULL, `payload` TEXT, `source` TEXT NOT NULL, `createdAt` INTEGER NOT NULL)",
+        "CREATE INDEX IF NOT EXISTS `index_assistant_message_createdAt` ON `assistant_message` (`createdAt`)",
+        "CREATE TABLE IF NOT EXISTS `category_limit` (`category` TEXT NOT NULL, `limitPaise` INTEGER NOT NULL, " +
+            "`updatedAt` INTEGER NOT NULL, PRIMARY KEY(`category`))",
+    )
 }
 
 val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -54,5 +63,11 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
 val MIGRATION_2_3 = object : Migration(2, 3) {
     override fun migrate(db: SupportSQLiteDatabase) {
         MigrationSql.V2_TO_V3.forEach { db.execSQL(it) }
+    }
+}
+
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MigrationSql.V3_TO_V4.forEach { db.execSQL(it) }
     }
 }

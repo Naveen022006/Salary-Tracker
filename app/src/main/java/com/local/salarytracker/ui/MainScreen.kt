@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -15,6 +16,8 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Handshake
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Handshake
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.History
@@ -48,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.local.salarytracker.Prefs
 import com.local.salarytracker.cloud.AccountStage
@@ -116,6 +120,7 @@ private fun MainScreen(vm: AppViewModel) {
             Tab("History", Icons.Outlined.History, Icons.Filled.History),
             Tab("Lending", Icons.Outlined.Handshake, Icons.Filled.Handshake),
             Tab("Report", Icons.Outlined.BarChart, Icons.Filled.BarChart),
+            Tab("Ask", Icons.Outlined.AutoAwesome, Icons.Filled.AutoAwesome),
             Tab("Settings", Icons.Outlined.Settings, Icons.Filled.Settings),
         )
     }
@@ -171,7 +176,20 @@ private fun MainScreen(vm: AppViewModel) {
                         selected = tab == i,
                         onClick = { vm.tab.value = i },
                         icon = { Icon(if (tab == i) t.selectedIcon else t.icon, contentDescription = null) },
-                        label = { Text(t.label, maxLines = 1, softWrap = false) },
+                        // Six tabs: labels shrink a little (down to 9sp) instead of being cut off, also at large font sizes.
+                        label = {
+                            val color = androidx.compose.material3.LocalContentColor.current
+                            androidx.compose.foundation.text.BasicText(
+                                t.label,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = { color },
+                                maxLines = 1,
+                                softWrap = false,
+                                autoSize = androidx.compose.foundation.text.TextAutoSize.StepBased(
+                                    minFontSize = 9.sp, maxFontSize = MaterialTheme.typography.labelMedium.fontSize, stepSize = 0.5.sp,
+                                ),
+                            )
+                        },
                         alwaysShowLabel = true,
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -208,7 +226,8 @@ private fun MainScreen(vm: AppViewModel) {
             }
         },
     ) { inner ->
-        Box(Modifier.fillMaxSize().padding(bottom = inner.calculateBottomPadding())) {
+        // consumeWindowInsets: the keyboard padding of the Ask input then starts above the bottom bar, not under it.
+        Box(Modifier.fillMaxSize().padding(bottom = inner.calculateBottomPadding()).consumeWindowInsets(PaddingValues(bottom = inner.calculateBottomPadding()))) {
             when (tab) {
                 0 -> ScreenScaffold(
                     title = "Today",
@@ -228,6 +247,7 @@ private fun MainScreen(vm: AppViewModel) {
                 1 -> HistoryScaffold(vm) { pad -> HistoryScreen(vm, pad) }
                 2 -> LendingTab(vm, lendingList)
                 3 -> ScreenScaffold("Report", contentWindowInsets = WindowInsets(0)) { pad -> ReportScreen(vm, pad) }
+                4 -> AssistantTab(vm)
                 else -> ScreenScaffold("Settings", contentWindowInsets = WindowInsets(0)) { pad -> SettingsScreen(vm, pad) }
             }
         }

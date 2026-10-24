@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Salary Tracker - Concept 1 "Allowance Ring"
+     1024x1024 adaptive-icon canvas (= 108dp). Masks show the central 66.7 %.
+     Coordinates are written in the 108dp space and scaled by 1024/108. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2E9BFF"/>
+      <stop offset="1" stop-color="#0057D6"/>
+    </linearGradient>
+    <radialGradient id="sheen" cx="0.3" cy="0.2" r="0.75">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <g transform="scale(9.481481)">
+    <!-- background: system blue, flattens to #007AFF -->
+    <rect width="108" height="108" fill="url(#bg)"/>
+    <rect width="108" height="108" fill="url(#sheen)"/>
+
+    <!-- today ring: track + 80 % arc, open at the top -->
+    <circle cx="54" cy="54" r="28" fill="none" stroke="#FFFFFF" stroke-opacity="0.28" stroke-width="6"/>
+    <path d="M54,26 A28,28 0 1 1 27.37,45.35" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round"/>
+
+    <!-- rupee glyph, drawn as strokes -->
+    <g fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M45,39 H63"/>
+      <path d="M45,47 H63"/>
+      <path d="M45,39 H53 C61,39 61,55 53,55 H45"/>
+      <path d="M48,55 L62,69"/>
+    </g>
+  </g>
+</svg>

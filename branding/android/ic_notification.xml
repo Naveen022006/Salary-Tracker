@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Salary Tracker status-bar icon: 24dp white silhouette (Android applies the tint).
+     Open allowance arc with the rupee inside, 2dp padding all round. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- 80 % arc, clockwise from 12 o'clock, r = 9 -->
+    <path
+        android:pathData="M12,3 A9,9 0 1 1 3.44,9.22"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round" />
+
+    <!-- rupee glyph -->
+    <path
+        android:pathData="M9.3,8.2 H15"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M9.3,10.8 H15"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M9.3,8.2 H11.8 C14.5,8.2 14.5,13.4 11.8,13.4 H9.3"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <path
+        android:pathData="M10.3,13.4 L14.8,17.9"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round" />
+</vector>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Salary Tracker - Concept 2 "Thirty Slices"
+     1024x1024 adaptive-icon canvas (= 108dp). Masks show the central 66.7 %.
+     30 ticks = the days of the month; blue ticks are the days already paid for. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#ECECF1"/>
+    </linearGradient>
+  </defs>
+  <g transform="scale(9.481481)">
+    <!-- background: white glass, flattens to #F7F7FA -->
+    <rect width="108" height="108" fill="url(#bg)"/>
+
+    <!-- 19 days used (system blue) -->
+    <path fill="none" stroke="#007AFF" stroke-width="3" stroke-linecap="round"
+      d="M54.00,28.50 L54.00,23.00 M59.30,29.06 L60.45,23.68 M64.37,30.70 L66.61,25.68 M68.99,33.37 L72.22,28.92 M72.95,36.94 L77.04,33.26 M76.08,41.25 L80.85,38.50 M78.25,46.12 L83.48,44.42 M79.36,51.33 L84.83,50.76 M79.36,56.67 L84.83,57.24 M78.25,61.88 L83.48,63.58 M76.08,66.75 L80.85,69.50 M72.95,71.06 L77.04,74.74 M68.99,74.63 L72.22,79.08 M64.37,77.30 L66.61,82.32 M59.30,78.94 L60.45,84.32 M54.00,79.50 L54.00,85.00 M48.70,78.94 L47.55,84.32 M43.63,77.30 L41.39,82.32 M39.01,74.63 L35.78,79.08"/>
+    <!-- 11 days left (light grey) -->
+    <path fill="none" stroke="#C7C7CC" stroke-width="3" stroke-linecap="round"
+      d="M35.05,71.06 L30.96,74.74 M31.92,66.75 L27.15,69.50 M29.75,61.88 L24.52,63.58 M28.64,56.67 L23.17,57.24 M28.64,51.33 L23.17,50.76 M29.75,46.12 L24.52,44.42 M31.92,41.25 L27.15,38.50 M35.05,36.94 L30.96,33.26 M39.01,33.37 L35.78,28.92 M43.63,30.70 L41.39,25.68 M48.70,29.06 L47.55,23.68"/>
+
+    <!-- rupee glyph in ink -->
+    <g fill="none" stroke="#1D1D1F" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M44,38 H64"/>
+      <path d="M44,46.5 H64"/>
+      <path d="M44,38 H53 C62,38 62,55 53,55 H44"/>
+      <path d="M47.5,55 L63,70"/>
+    </g>
+  </g>
+</svg>

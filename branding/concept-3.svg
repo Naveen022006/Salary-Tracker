@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Salary Tracker - Concept 3 "Pay Day"
+     1024x1024 adaptive-icon canvas (= 108dp). Masks show the central 66.7 %.
+     A calendar day page holding the rupee, with the day's allowance bar below. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="bg" cx="0.5" cy="0.35" r="0.8">
+      <stop offset="0" stop-color="#2C2C30"/>
+      <stop offset="1" stop-color="#0A0A0C"/>
+    </radialGradient>
+    <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1E8EFF"/>
+      <stop offset="1" stop-color="#0066E6"/>
+    </linearGradient>
+  </defs>
+  <g transform="scale(9.481481)">
+    <!-- background: graphite, flattens to #1C1C1E -->
+    <rect width="108" height="108" fill="url(#bg)"/>
+
+    <!-- calendar page -->
+    <rect x="30" y="29" width="48" height="50" rx="10" fill="url(#page)"/>
+    <!-- header band (clipped to the top corners of the page) -->
+    <path d="M40,29 H68 C73.5,29 78,33.5 78,39 V41 H30 V39 C30,33.5 34.5,29 40,29 Z" fill="#0A3F9C" fill-opacity="0.55"/>
+    <!-- binder pins -->
+    <path d="M42,26 V34 M66,26 V34" fill="none" stroke="#FFFFFF" stroke-width="3.4" stroke-linecap="round"/>
+
+    <!-- rupee glyph -->
+    <g fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M46.5,46 H61.5"/>
+      <path d="M46.5,52.5 H61.5"/>
+      <path d="M46.5,46 H53.5 C60,46 60,59 53.5,59 H46.5"/>
+      <path d="M49,59 L60.5,70.5"/>
+    </g>
+
+    <!-- today's allowance bar -->
+    <path d="M41,74.5 H67" fill="none" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="2.8" stroke-linecap="round"/>
+    <path d="M41,74.5 H58" fill="none" stroke="#34C759" stroke-width="2.8" stroke-linecap="round"/>
+  </g>
+</svg>

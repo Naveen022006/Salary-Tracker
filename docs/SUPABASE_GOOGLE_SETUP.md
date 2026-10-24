@@ -1,0 +1,132 @@
+# Supabase + Google Sign-In Setup
+
+Follow the steps in order. Do not skip steps. Takes about 30 minutes.
+
+> WARNING: NEVER put the `service_role` / `secret` key in the app or on GitHub.
+> The app only needs the **anon / publishable** key. This GitHub repository is public.
+
+## A. Create the Supabase project
+
+1. Go to https://supabase.com and sign in. Click **New project**.
+2. Choose a name and a strong database password. Save the password in your password manager.
+3. Region: **Mumbai (ap-south-1)**.
+4. Wait until the project is ready.
+5. Open **Settings -> API**. Copy two values:
+   - **Project URL** (looks like `https://xxxx.supabase.co`)
+   - **anon / publishable key**
+6. Do NOT copy the `service_role` / `secret` key anywhere.
+
+## B. Create the database tables
+
+1. Open **SQL Editor -> New query**.
+2. Paste the full content of `supabase/migrations/0001_init.sql` and click **Run**. You should see "Success".
+3. Open a new query, paste `supabase/tests/rls_check.sql`, run it block by block.
+   - Check 1: all tables show `true` and `true`.
+   - Check 2: each of the 3 tables has 4 policies.
+   - Check 3 and 4: must return no rows.
+   - Check 6: the first three columns must be `false`, the last one `true`.
+
+## C. Google Cloud Console
+
+1. Go to https://console.cloud.google.com and create a **new project** (for example "Salary Tracker").
+2. **OAuth consent screen** (Google Auth platform):
+   - User type: **External**.
+   - App name, support email, developer email.
+   - Scopes: `openid`, `email`, `profile`.
+   - While the app is in **Testing** mode, add your Gmail address (and family) under **Test users**. Or click **Publish app** to allow everyone.
+3. **Credentials -> Create credentials -> OAuth client ID**. Create three clients:
+   1. **Web application** (name: "Salary Tracker Web").
+      - Copy the **Client ID** and **Client secret**.
+      - The Client ID goes to Supabase (step D) AND into the app as `GOOGLE_WEB_CLIENT_ID`.
+      - The secret goes ONLY to Supabase. Never in the app, never in GitHub.
+      - You can leave "Authorized redirect URIs" empty for ID-token sign-in. If Google asks for one, use the callback URL shown in Supabase (Authentication -> Providers -> Google).
+   2. **Android** (release app):
+      - Package name: `com.local.salarytracker`
+      - SHA-1: `97:92:EF:82:41:74:12:C0:97:8A:DC:D1:8F:B5:9E:45:80:4D:4D:42`
+   3. **Android** (debug app):
+      - Package name: `com.local.salarytracker.debug`
+      - SHA-1: `91:9A:B6:47:8F:C5:DA:02:3B:16:63:33:4F:6B:9E:D7:76:E2:26:6E`
+4. To read the SHA-1 again, open a terminal in the project folder and run:
+
+   ```
+   keytool -list -v -keystore salarytracker.keystore -alias salarytracker
+   ```
+
+   Enter the keystore password and copy the line `SHA1:`. For the debug key, use the file `%USERPROFILE%\.android\debug.keystore`, alias `androiddebugkey`, password `android`.
+   If you change the keystore, you must update the SHA-1 in Google Cloud.
+
+## D. Turn on Google in Supabase
+
+1. Supabase -> **Authentication -> Sign In / Providers -> Google**.
+2. Enable it.
+3. Paste the **Web** Client ID and Client secret from step C.
+4. In **Authorized Client IDs** add the same **Web** Client ID. (Required for ID-token sign-in from the app.)
+5. Keep **Skip nonce check** turned **OFF**.
+6. Save.
+
+## E. Rate limits (protect your free quota)
+
+In Supabase -> **Authentication -> Rate Limits**, suggested values:
+
+| Setting | Suggested | What it protects |
+|---|---|---|
+| Sign-ups and sign-ins (per IP per 5 min) | 30 | Stops password/token guessing and bots |
+| Token refreshes (per IP per 5 min) | 150 | Stops refresh loops from burning quota |
+| Token verifications (per IP per 5 min) | 30 | Stops brute force on tokens |
+| Anonymous sign-ins | keep OFF | The app does not use them |
+| Email sending | not used | The app uses Google only |
+
+Names can differ a little in the dashboard; pick the closest ones.
+
+Database limits (from `0001_init.sql`, per user). When exceeded, the API answers HTTP **429** (or 413 for the row cap):
+
+| Limit | Value |
+|---|---|
+| Transaction writes per minute | 300 |
+| Transaction writes per day | 5,000 |
+| Profile writes per minute | 30 |
+| Category rule writes per minute | 120 |
+| Delete-all-data calls per hour | 3 |
+| Max transaction rows per user | 200,000 (HTTP 413) |
+| Max rows per sync batch (app side) | 100 |
+| Max `allowed_packages` | 300 |
+
+Note: an upsert of a row that already exists counts as 2 writes (one insert attempt, one update). Keep this in mind for the per-minute limit.
+
+## F. Put the keys in the app
+
+1. In `E:\salary-tracker`, copy `supabase.properties.example` to `supabase.properties`.
+2. Fill in these keys:
+   - `SUPABASE_URL` = Project URL from step A
+   - `SUPABASE_ANON_KEY` = anon / publishable key from step A
+   - `GOOGLE_WEB_CLIENT_ID` = Web Client ID from step C
+3. `supabase.properties` is ignored by git. Never commit it.
+4. Build: `gradlew.bat assembleRelease`
+5. Install the new APK on your phone.
+
+## G. Troubleshooting
+
+- **"No credentials available"**: no Google account on the phone, or the SHA-1 or package name in the Android client is wrong. Add a Google account in phone Settings. Check that release uses `com.local.salarytracker` with the release SHA-1, and debug uses `com.local.salarytracker.debug` with the debug SHA-1.
+- **"Developer console is not set up correctly"**: the Android OAuth client is missing or wrong. Create it (step C) and wait 5-10 minutes.
+- **"invalid nonce"**: Supabase Google provider has "Skip nonce check" OFF, so the app must send the nonce. Make sure the app and the Web Client ID are the latest build and the Web Client ID is in "Authorized Client IDs".
+- **HTTP 429 "Too many requests"**: you hit a rate limit (step E). Wait a few minutes and try again.
+- **HTTP 413**: you reached 200,000 transactions. Delete old data.
+- **Google says "access blocked" / app not verified**: the consent screen is in Testing mode. Add your Gmail under **Test users**, or publish the app.
+- **Sign-in works but no data syncs**: run `supabase/tests/rls_check.sql` and check the tables exist.
+
+## H. Your data
+
+Stored in the cloud (your own Supabase project, protected by row level security so each user sees only their own rows):
+
+- Profile: salary, pay day, savings goal, reminder settings, tracking start date, SMS/notification/smart-detect/alert switches, allowed app packages, theme, onboarding flag.
+- Transactions: amount (paise), debit/credit, date and time, merchant, category, source (SMS/NOTIFICATION/MANUAL), sender, last 4 digits of account, UPI reference, your note, excluded flag, deleted flag, and a SHA-256 hash of the message (used only to avoid duplicates).
+- Category rules: keyword and category.
+- Your Google account id and email (kept by Supabase Auth).
+
+**Never uploaded:** the original SMS text and notification text. Only the hash, which cannot be turned back into text.
+
+To delete your cloud data:
+
+1. In the app, use the "Delete cloud data" option (it calls the `delete_my_data` function), or
+2. In the SQL Editor run `select public.delete_my_data();` while signed in as the user, or
+3. To also remove the login: Supabase -> **Authentication -> Users** -> delete the user. All their rows are removed automatically (cascade).

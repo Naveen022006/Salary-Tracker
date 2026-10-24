@@ -86,7 +86,7 @@ adb shell "am broadcast -n com.local.salarytracker/.capture.TestReceiver -a com.
 adb shell "am broadcast -n com.local.salarytracker/.capture.TestReceiver -a com.local.salarytracker.TEST_DELETE --es merchantPrefix Test --el sinceMillis 1779000000000"
 adb logcat -s SalaryTracker
 ```
-(`--el time` = epoch millis, optional; default now.) In Git Bash prefix with `MSYS_NO_PATHCONV=1`. The notification test only works for packages in the "Apps to watch" list. `TEST_REMINDER` runs the real `ReminderWorker` once and posts the reminder notification. `TEST_DELETE` deletes one txn by `--el id`, or all txns with timestamp >= `--el sinceMillis` whose merchant starts with `--es merchantPrefix` (case-insensitive); logs `TEST_DELETE: deleted N` to tag SalaryTracker. A successful save logs `saved #id DEBIT ₹250 merchant=... category=...`; otherwise the log says why it was ignored.
+(`--el time` = epoch millis, optional; default now.) In Git Bash prefix with `MSYS_NO_PATHCONV=1`. The notification test only works for packages in the "Apps to watch" list. `TEST_REMINDER` runs the real `ReminderWorker` once and posts the reminder notification. `TEST_LOAN_DUE` runs `LoanDueWorker` once (money-return notifications for lending entries due today or late). `TEST_DELETE` deletes one txn by `--el id`, or all txns with timestamp >= `--el sinceMillis` whose merchant starts with `--es merchantPrefix` (case-insensitive); logs `TEST_DELETE: deleted N` to tag SalaryTracker. A successful save logs `saved #id DEBIT ₹250 merchant=... category=...`; otherwise the log says why it was ignored.
 
 ---
 
@@ -179,3 +179,53 @@ Room stays the source of truth; the cloud is a background copy. `rawText` is nev
 
 ### Build variants
 Debug: `applicationIdSuffix ".debug"`, app name "Salary Tracker (debug)" (`src/debug/res`), so it installs beside the real app. R8 keep rules for serialization/Ktor/supabase-kt are in `proguard-rules.pro`.
+
+# v1.3 data + cloud (Lending, reconnect sync)
+
+## Room v3 (additive 2 -> 3, no destructive fallback)
+`MigrationSql.V2_TO_V3` / `MIGRATION_2_3` only create tables, existing rows are untouched. `schemas/.../3.json` is exported; `MigrationSqlTest` runs v2 data through the migration, checks it survives and that the new tables/indices equal the exported v3 schema.
+- `person` (`PersonEntity`): id, `remoteId` (UUID, unique), name (<=80), phone (<=20, "+" and digits only), note, createdAt, updatedAt, deleted, dirty.
+- `loan_entry` (`LoanEntryEntity`): id, `remoteId` (unique), `personRemoteId` (indexed, no SQL foreign key so cloud rows can arrive in any order), kind (`LoanKind` GAVE / GOT_BACK / BORROWED / PAID_BACK), amountPaise (>0), method (`LoanMethod` CASH / UPI / BANK / CARD / OTHER), appName ("GPay", "PhonePe", ...), occurredAt (epoch ms), dueDate (ISO yyyy-MM-dd), note (<=500), updatedAt, deleted, dirty.
+- DAOs in `data/LendingDaos.kt` (`PersonDao`, `LoanEntryDao`). All normal queries hide `deleted = 1`; "active" entry queries also hide entries of deleted people. Deleting a person soft-deletes their entries with the same timestamp (`restorePerson` brings back exactly those).
+- Lending is NOT part of `TxnEntity`: `BudgetEngine`, Today and Report are untouched. `wipeLocal()` (`clearAllTables`) covers the new tables; "Delete all data" soft-deletes them too (`Repository.deleteAllLending`) so the cloud copy goes as well.
+
+## budget/LoanMath.kt (pure, `LoanMathTest`)
+balance = GAVE - GOT_BACK - BORROWED + PAID_BACK (positive = they owe you, negative = you owe them). `totals` (youWillGet = sum of positive, youNeedToPay = sum of |negative|), `runningBalances` (time order), `dueState` (OVERDUE / DUE_TODAY / UPCOMING / NONE: only GAVE needs balance > 0 and BORROWED balance < 0 to count), `summarize` -> `PersonBalance`, `dueLoans` -> `DueLoan`, `normalizePhone`.
+
+## Repository lending API
+`addPerson(name, phone?, note?)`, `updatePerson(person)`, `deletePerson(remoteId)`, `restorePerson(remoteId)`, `findPersonByName(name)`, `addLoanEntry(personRemoteId, kind, amountPaise, method, appName?, occurredAt, dueDate: LocalDate?, note?)`, `updateLoanEntry(entry)`, `deleteLoanEntry(remoteId)`, `restoreLoanEntry(remoteId)`, `observePeopleWithBalance()`, `observePersonWithBalance(remoteId)`, `observePerson(remoteId)`, `observeEntries(personRemoteId)`, `observeLendingTotals()`, `dueEntries(today)`, `deleteAllLending()`. Every write sets updatedAt = now, dirty = 1 and calls `SyncScheduler.onLocalChange`.
+
+## Sync of the new tables (`SyncEngine`, `Dtos.kt`, `SyncErrors.kt`)
+- Tables `people` and `loan_entries` (SQL `supabase/migrations/0003_lending.sql`). DTOs have no local ids: id = remoteId, `person_id` = personRemoteId, `due_date` = ISO date.
+- Pull after rules, per table cursor (`updated_at >= cursor`, pages of 500) with the same `Merge.decide` (last write wins, server clock skew). Remote deleted -> local row removed (a deleted person also removes their entries). Push after rules: people first, then entries, batches of 100, upsert on `id`; one-by-one retry for a rejected batch. An entry refused with an FK error (23503/409) because its person is not on the server yet stays dirty, people are pushed again and the entry is retried once; it is never dropped. Synced soft deletes are purged (entries before people).
+- If the server has no lending tables (0003 not run: 404 / PGRST205 / 42P01) the lending steps are skipped quietly (logged once), transactions keep syncing, `SyncStatus.hint` = "Lending sync needs the 0003 database update" (null when fine); the tables are probed again after 30 minutes. Dirty lending rows then stay counted as unsynced (sign-out warns correctly).
+
+## Auto-sync on reconnect
+- `SyncScheduler.onLocalChange(ctx)` is the single "something changed" entry point (debounced 20 s, constrained one-time work, works with the app closed). Called by every `Repository` write (txns, rules, settings/profile via `Prefs.markProfileChanged`, people, entries), `Capture` (SMS receiver, notification listener, test hooks), `InboxScanner` (>= 1 saved), `TestReceiver`.
+- `SyncScheduler.syncSoon(ctx)`: one-time constrained work without debounce (unique `sync_now`), 15 s client throttle still applies.
+- `cloud/Connectivity.kt`: `registerDefaultNetworkCallback` from `App.onCreate` (ACCESS_NETWORK_STATE declared). On `onAvailable` or VALIDATED newly true: (1) inbox catch-up scan since `lastSmsScanTime` if SMS capture is on and READ_SMS granted; (2) if signed in and (unsynced changes > 0 or last sync > 5 min ago) -> `syncSoon`. `Connectivity.online` is a StateFlow.
+- `Repository.observeUnsyncedCount()` = dirty txns + rules + people + entries + 1 if the profile is dirty. `SyncStatus.observeUi(repo)` (exposed as `AppViewModel.syncUi`) adds `SyncUi.Waiting(n)` when offline with n > 0 ("3 changes waiting for internet"); other statuses unchanged.
+
+# v1.3 UI part 3 (Lending screens, reminders) - version 1.3 (code 4)
+
+## Navigation
+Bottom bar has 5 tabs: Today · History · **Lending** (index 2, `Icons.Outlined/Filled.Handshake`) · Report · Settings. Labels are always shown (1 line). The person screen is not a separate route: `AppViewModel.selectedPerson` (remoteId or null) switches `LendingTab` between the home list and `PersonScreen`; `BackHandler` / the back arrow clear it. The Add person FAB shows only on the Lending home. All sheets (`PersonSheet`, `LoanEntrySheet`) are opened through `AppViewModel.personSheet` / `loanSheet` and drawn from `MainScreen` next to the cash entry sheet.
+
+## Files (`ui/`)
+- `LendingScreen.kt`: `LendingTab`, home list (sync `hint` banner, hero card with You will get / You need to pay + "N overdue", filter chips All / Owe me / I owe / Settled, name search in the top bar, people rows with balance pill and Overdue / Due today badge, empty state).
+- `PersonScreen.kt`: header (avatar, phone, balance in `MoneyStyle.Hero`, Call = `ACTION_DIAL`, Message = `ACTION_SENDTO smsto:` with a prefilled reminder only when they owe you), 2x2 action buttons, History timeline (signed cash-flow amount, running balance from `LoanMath.runningBalances`, due line from `LoanMath.dueState`), overflow menu (Edit / Delete with Undo through `restorePerson`).
+- `LendingSheets.kt`: `PersonSheet` (name, phone, note, duplicate-name hint from `findPersonByName`, "Pick from contacts") and `LoanEntrySheet` (kind tiles, amount, How? chips, date, optional Return by, note, soft warning when getting back more than owed, delete + Undo). Method chips map to `LoanMethod` + `appName` (GPay / PhonePe / Paytm / Navi = UPI + appName); an untouched chip keeps the saved method of an existing entry.
+- `components/LendingBits.kt`: `PersonAvatar` (colour from the name, from the category palette), `TintPill`, `appChipColors()` (selected chips use primaryContainer, not the saffron default).
+- Lending never touches the daily budget: no code in `BudgetEngine`, Today or Report reads lending data.
+
+## Contact picker (no READ_CONTACTS)
+Primary: `ActivityResultContracts.StartActivityForResult` with `Intent(ACTION_PICK, CommonDataKinds.Phone.CONTENT_URI)`; the returned phone row (temporary read grant) gives DISPLAY_NAME + NUMBER. If it fails or is missing: `ActivityResultContracts.PickContact()` and a read of DISPLAY_NAME / HAS_PHONE_NUMBER, then the number by CONTACT_ID (a `SecurityException` leaves only the name and the sheet says to type the number). The name field is only filled when empty; the number goes through `LoanMath.normalizePhone`.
+
+## Money return reminders (`work/LoanDueWorker.kt`)
+- `LoanDueScheduler.sync(ctx)`: unique periodic work `loan_due_reminder`, 24 h, first run at the next 10:00 local (same delay helper as the evening reminder), no network constraint, `KEEP`. Called from `App.onCreate` and from the Settings switch (Settings → Reminders → "Money return reminders", `Prefs.loanRemindersEnabled`, default on; off cancels the work).
+- `Notifier.postLoanDue`: uses `Repository.dueEntries(today)`; one notification per person (max 5, then "N more people have money due"), channel `lending` ("Lending reminders"): "Ramesh should return ₹2,000 today", "Ramesh is 3 days late returning ₹2,000", "Pay back ₹500 to Priya today". Amount = due entries added up, never more than the open balance. Tap puts `Extras.LOAN_PERSON_ID` in the intent; `MainActivity.handleIntent` calls `AppViewModel.openLoanPerson`, which selects the person and asks `MainScreen` (via `lendingTabRequest`) to switch to the Lending tab.
+- Test hook: `adb shell am broadcast -n com.local.salarytracker/.capture.TestReceiver -a com.local.salarytracker.TEST_LOAN_DUE` (DUMP-protected) runs the worker once, even when the switch is off.
+
+## Other
+- Settings → Apps to watch → under the smart switch: "If you turn off notifications for an app, its payments still come from your bank SMS."
+- Settings → Account: `SyncStatus.hint` (for example "Lending sync needs the 0003 database update") is shown under the Sync row.

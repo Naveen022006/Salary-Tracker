@@ -67,6 +67,7 @@ and choose **Unrestricted**.
 - **Today**: "Left today" and "Left this month", today's spending, and the **+ Add cash** button.
 - **History**: all entries by day. Tap one to change the amount, category or note, mark it "Not
   spending", or delete it. When you change a category, the app can remember it for that shop.
+- **Lending**: people you lend to or borrow from, with balances and return dates.
 - **Report**: salary, spent, saved, a category chart, a daily chart (bars = spending, line = allowance),
   days under/over budget, top places and biggest expenses. Use ◀ ▶ to see older months.
 - **Settings**: your account (Sync now, Sign out, Delete my cloud data), salary, salary day, savings goal,
@@ -74,6 +75,31 @@ and choose **Unrestricted**.
 
 Every evening (default 9:30 PM) the app reminds you: *"Did you spend any cash today?"*.
 Tap it to add cash spending.
+
+## Lending (version 1.3)
+
+The **Lending** tab (in the middle of the bottom bar) is for money you give to people or borrow from them.
+It does **not** change your daily budget or your report.
+
+- Tap **Add person**. Type a name, or tap **Pick from contacts** to fill the name and phone number.
+  The app does not need permission to read all your contacts; it only gets the one you choose.
+- Open a person and tap **I gave**, **I got back**, **I borrowed** or **I paid back**. Choose how it was
+  done (Cash, GPay, PhonePe, Paytm, Navi, Bank transfer, Other), the date, and a note.
+- For money you gave or borrowed you can set a **Return by** date. At 10 AM on that day (and every day after,
+  until it is paid) the app reminds you. You can turn this off in Settings → Reminders → **Money return reminders**.
+- The top card shows **You will get** and **You need to pay**. Each person shows who owes whom, and an
+  **Overdue** or **Due today** mark when a return date has come.
+- **Call** and **Message** open your phone or messages app; you press send yourself.
+- Lending is saved on the phone and in your private cloud account like everything else. Run
+  `supabase/migrations/0003_lending.sql` in the Supabase SQL Editor once so it can sync (see
+  `docs/SUPABASE_GOOGLE_SETUP.md`).
+
+**Sync happens by itself when internet comes back.** If you were offline, Settings shows "N changes waiting for
+internet", and they are uploaded as soon as the phone is online again.
+
+**Muted notifications:** bank SMS are read even when notifications for your Messages app are muted or off.
+Payment apps (GPay, PhonePe...) are different: if you *mute* their alerts (silent) they can still be read, but if you
+turn their notifications *completely off*, no app can read them. Your bank SMS still covers those payments.
 
 ## Build from source (PC)
 

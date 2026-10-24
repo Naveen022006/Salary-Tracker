@@ -12,6 +12,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 
 /** Where the sign-in hand-over is. [Ready] means the app can show onboarding or the main screens. */
 sealed interface AccountStage {
@@ -53,6 +55,7 @@ class AccountController(
             try {
                 val s = GoogleSignIn.signIn(activityContext)
                 Prefs.setAccount(app, s.name, s.email)
+                CloudEvents.profileApplied.tryEmit(Unit) // let Settings show the name and email at once
                 _login.value = LoginState.Idle
             } catch (e: CancellationException) {
                 throw e
@@ -70,6 +73,7 @@ class AccountController(
         beganFor = userId
         _stage.value = AccountStage.Checking
         scope.launch {
+            fillAccountFromSession()
             try {
                 val owner = Prefs.ownerUserId(app)
                 when {
@@ -204,6 +208,19 @@ class AccountController(
                 else -> "Could not delete your cloud data. Please try again."
             }
         }
+    }
+
+    /** Restored sessions (or sign-ins from an older version) have no name/email in Prefs yet: take them from the session. */
+    private fun fillAccountFromSession() {
+        if (Prefs.accountName(app).isNotEmpty() || Prefs.accountEmail(app).isNotEmpty()) return
+        val user = runCatching { Cloud.client.auth.currentUserOrNull() }.getOrNull() ?: return
+        val meta = user.userMetadata
+        fun str(key: String) = (meta?.get(key) as? JsonPrimitive)?.contentOrNull.orEmpty()
+        val name = str("full_name").ifEmpty { str("name") }
+        val email = user.email.orEmpty()
+        if (name.isEmpty() && email.isEmpty()) return
+        Prefs.setAccount(app, name, email)
+        CloudEvents.profileApplied.tryEmit(Unit)
     }
 
     private suspend fun wipeLocalAll() {

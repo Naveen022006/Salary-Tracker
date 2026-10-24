@@ -58,14 +58,14 @@ WorkManager merges WAKE_LOCK, ACCESS_NETWORK_STATE, RECEIVE_BOOT_COMPLETED, FORE
 - Permissions in the APK: READ_SMS, RECEIVE_SMS, POST_NOTIFICATIONS + WorkManager's WAKE_LOCK, ACCESS_NETWORK_STATE, RECEIVE_BOOT_COMPLETED, FOREGROUND_SERVICE. INTERNET (cloud sync). Check: `aapt2 dump permissions SalaryTracker.apk`.
 
 ## Components (package `com.local.salarytracker`)
-- `App` - creates notification channels ("Daily reminder", "New expense"), calls `ReminderScheduler.sync(replace=false)`.
+- `App` - creates notification channels ("Daily summary", "New expense"), calls `ReminderScheduler.sync(replace=false)`.
 - `capture/Capture` - shared pipeline: `sms(ctx, sender, body, ts)` and `notification(ctx, pkg, title, text, ts)` -> parse -> `Repository.addCaptured` -> optional capture alert. Returns a result string (logged to logcat tag `SalaryTracker`). Respects `smsEnabled` / `notifEnabled` / `allowedPackages`.
 - `capture/SmsReceiver` - `SMS_RECEIVED` (permission BROADCAST_SMS), joins multipart PDUs per sender, `goAsync()` + coroutine.
 - `capture/PaymentNotificationListener` - NotificationListenerService; skips own package, ongoing and group-summary notifications; uses EXTRA_TITLE + EXTRA_TEXT/BIG_TEXT; SMS apps and non-allowed packages are dropped in `Capture.notification`.
 - `capture/InboxScanner(ctx).scan(sinceMillis)` - reads `content://sms/inbox` (`date > since`), stores via `addCaptured`, sets `lastSmsScanTime`. Used by onboarding / Settings import (ranges 3, 6, 12 months, all = since 0) and by the catch-up scan on every `MainActivity.onResume` (since `lastSmsScanTime`, only when permission granted, `smsEnabled`, onboarding done).
 - `capture/TestReceiver` - exported, `android:permission="android.permission.DUMP"` (only adb shell). Actions below.
 - `work/ReminderScheduler` - unique periodic work `daily_reminder` (24 h, initial delay to next reminder time; UPDATE when time changes or toggled, KEEP on app start; cancelled when reminder is off or onboarding is not done). `ReminderScheduler.runNow()` enqueues the real `ReminderWorker` once.
-- `work/Notifier` - capture alert ("₹250 · Swiggy · Food — left today ₹430", tap -> edit screen via extra `txn_id`) and daily reminder ("Today you spent ₹X. Did you spend any cash? Tap to add.", tap and "Add cash" button -> extra `open_add_cash`).
+- `work/Notifier` - capture alert ("₹250 · Swiggy · Food — left today ₹430", tap -> edit screen via extra `txn_id`) and the daily summary (see below).
 - `Prefs` - SharedPreferences for the reminder on/off flag (not in Room, so no DB migration was needed). `BudgetService.snapshotNow` - current-period snapshot used by notifications.
 - `util/Money` - Indian-grouping formatter (`₹1,25,000`, paise only when non-zero), input parser. Has `MoneyTest`.
 - Data additions (no schema change): `TxnDao.observeEarliest()`, `RuleDao.deleteAll()`, `Repository.observeEarliest()`, `Repository.deleteAllRules()`.
@@ -229,3 +229,12 @@ Primary: `ActivityResultContracts.StartActivityForResult` with `Intent(ACTION_PI
 ## Other
 - Settings → Apps to watch → under the smart switch: "If you turn off notifications for an app, its payments still come from your bank SMS."
 - Settings → Account: `SyncStatus.hint` (for example "Lending sync needs the 0003 database update") is shown under the Sync row.
+
+## Daily summary (`budget/DailySummary.kt`, `Notifier.postReminder`)
+- Replaces the old evening reminder text; same worker (`ReminderWorker`), same time setting and switch (Settings -> Reminders -> "Daily summary"). Channel id stays `reminder`, user-visible name "Daily summary".
+- `DailySummaryBuilder.build(today, period, SummarySettings(salary, goal, payDay), trackingStart, txns: List<SpendItem>, lendingTotals?)` returns `DailySummary(title, lines (max 5), tip, collapsed)`. Pure Kotlin; uses `BudgetEngine.report`, so numbers equal the Today screen (trackingStart respected). Lines: top-3 categories today, today left/over, month left/over + days to go (days after today), savings line (goal: "On track ... + extra so far"; no goal: projection = budget - spent - avgDaily x days after today, floored 0; month over: "Try to avoid extra spending"; behind even pace but pool >= 0: "Spend under X a day"), lending line (omitted when both zero).
+- Tip table (today's biggest non-fixed category): Food (estimate = category avg daily x 8 x 0.5, rounded to Rs 100, only if >= Rs 100), Shopping, Travel, Entertainment, People, default; no spending -> "Great day! Keep it up."
+- Notifier: `InboxStyle` (title, lines, tip as summary text), collapsed text = title + today's budget line. Tap and "See report" -> extra `Extras.OPEN_REPORT` (`MainActivity.handleIntent` sets `vm.tab = 3`); "Add cash" -> `open_add_cash`. `TEST_REMINDER` runs the same code. Tests: `DailySummaryTest`.
+
+## Notification catch-up
+`PaymentNotificationListener.onListenerConnected()` passes every `activeNotifications` entry through the same `handle(sbn)` filters/capture path as `onNotificationPosted`, using `sbn.postTime`. Repeats are safe: the same post time + text gives the same `Dedupe.bodyHash` (5-minute bucket, unique column) and cross-source `Dedupe.isDuplicate` merges the rest (`RepeatedNotificationHashTest`). Logs "Listener connected: sent N of M active notifications" to tag SalaryTracker.

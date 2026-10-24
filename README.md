@@ -73,8 +73,20 @@ and choose **Unrestricted**.
 - **Settings**: your account (Sync now, Sign out, Delete my cloud data), salary, salary day, savings goal,
   reminder time, which apps to watch, import SMS, learned categories, delete all data.
 
-Every evening (default 9:30 PM) the app reminds you: *"Did you spend any cash today?"*.
-Tap it to add cash spending.
+## Daily summary
+
+Every evening (default 9:30 PM) the app sends a **Daily summary** notification. Open it to see:
+- what you spent today and the top 3 categories,
+- what is left from today's budget and from this month, and how many days to go,
+- whether you are on track to save your goal (or how much you will save at this pace),
+- money friends owe you or you owe (if you use Lending),
+- one simple tip to save money.
+
+Tap it to open the Report. The **Add cash** button opens the add-cash screen, **See report** opens the Report.
+Turn it off or change the time in Settings → Reminders → **Daily summary**.
+
+When you give notification access, the app also reads payment notifications that are already in your
+notification bar. Nothing is saved twice.
 
 ## Lending (version 1.3)
 

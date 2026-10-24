@@ -2,6 +2,7 @@ package com.local.salarytracker.capture
 
 import android.content.Context
 import android.net.Uri
+import com.local.salarytracker.cloud.SyncScheduler
 import com.local.salarytracker.data.AppDatabase
 import com.local.salarytracker.data.Repository
 import com.local.salarytracker.model.TxnSource
@@ -48,6 +49,7 @@ class InboxScanner(private val ctx: Context) {
             return@withContext Result(0, 0, 0, permissionMissing = true)
         }
         repo.updateSettings { it.copy(lastSmsScanTime = maxOf(it.lastSmsScanTime, startedAt)) }
+        if (saved > 0) SyncScheduler.onLocalChange(ctx)
         Capture.log("Inbox scan: scanned=$scanned saved=$saved expenses=$expenses")
         Result(scanned, saved, expenses)
     }

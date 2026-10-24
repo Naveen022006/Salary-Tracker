@@ -119,6 +119,7 @@ class AccountController(
                 ready()
             }
             SyncResult.Offline -> _stage.value = AccountStage.LoadError("No internet. Connect and try again.")
+            SyncResult.Slow -> _stage.value = AccountStage.LoadError("Slow connection. Please try again.")
             SyncResult.RateLimited -> _stage.value = AccountStage.LoadError("Too many requests. Wait a minute and try again.")
             SyncResult.Skipped -> {
                 // another sync is running; look again shortly

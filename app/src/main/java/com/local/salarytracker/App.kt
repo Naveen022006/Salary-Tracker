@@ -44,7 +44,9 @@ class App : Application() {
         AppDatabase.get(this) // also remembers the app context used by the sync hooks
         Notifier.createChannels(this)
         ReminderScheduler.sync(this, replace = false)
+        com.local.salarytracker.work.LoanDueScheduler.sync(this)
         mergeCatalogIntoWatchList()
         com.local.salarytracker.cloud.SyncScheduler.ensurePeriodic(this)
+        com.local.salarytracker.cloud.Connectivity.register(this) // sync + SMS catch-up as soon as internet is back
     }
 }

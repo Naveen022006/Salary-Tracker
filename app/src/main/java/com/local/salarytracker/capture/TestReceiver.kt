@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
  * TEST_NOTIF: --es pkg P --es title T --es text X [--el time epochMs]
  *   goes through the same allowed-list / smart-mode logic as real notifications (any package works in smart mode).
  * TEST_REMINDER: runs the daily reminder worker now.
+ * TEST_LOAN_DUE: runs the money-return reminder worker now (notifications for lending entries due today or late).
  * TEST_DELETE: --el id N (delete that txn) or --es merchantPrefix P --el sinceMillis MS (delete txns created at/after MS
  *   whose merchant starts with P, case-insensitive). Logs the number deleted.
  */
@@ -26,6 +27,11 @@ class TestReceiver : BroadcastReceiver() {
         if (action == ACTION_REMINDER) {
             ReminderScheduler.runNow(app)
             Capture.log("TEST_REMINDER: worker enqueued")
+            return
+        }
+        if (action == ACTION_LOAN_DUE) {
+            com.local.salarytracker.work.LoanDueScheduler.runNow(app)
+            Capture.log("TEST_LOAN_DUE: worker enqueued")
             return
         }
         val pending = goAsync()
@@ -52,6 +58,7 @@ class TestReceiver : BroadcastReceiver() {
                     }
                     else -> "unknown action"
                 }
+                com.local.salarytracker.cloud.SyncScheduler.onLocalChange(app)
                 Capture.log("$action: $result")
             } catch (t: Throwable) {
                 android.util.Log.e(Capture.TAG, "$action failed", t)
@@ -65,6 +72,7 @@ class TestReceiver : BroadcastReceiver() {
         const val ACTION_SMS = "com.local.salarytracker.TEST_SMS"
         const val ACTION_NOTIF = "com.local.salarytracker.TEST_NOTIF"
         const val ACTION_DELETE = "com.local.salarytracker.TEST_DELETE"
+        const val ACTION_LOAN_DUE = "com.local.salarytracker.TEST_LOAN_DUE"
         const val ACTION_REMINDER = "com.local.salarytracker.TEST_REMINDER"
     }
 }

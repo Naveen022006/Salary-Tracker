@@ -3,6 +3,8 @@ package com.local.salarytracker
 import android.content.Context
 import com.local.salarytracker.cloud.SyncScheduler
 import com.local.salarytracker.model.ThemeMode
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import java.time.LocalDate
 
 /** Tiny on-device preferences that are not part of the Room settings row. */
@@ -13,6 +15,10 @@ object Prefs {
         p(ctx).edit().putBoolean("reminder_enabled", v).apply()
         if (!fromSync) markProfileChanged(ctx)
     }
+
+    /** Daily 10:00 reminder for money that should come back (or be paid back) today. Default on. */
+    fun loanRemindersEnabled(ctx: Context) = p(ctx).getBoolean("loan_reminders", true)
+    fun setLoanRemindersEnabled(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("loan_reminders", v).apply()
 
     /** Smart mode: also look for completed payments in alerts from apps that are not in the watch list. Default on. */
     fun smartDetect(ctx: Context) = p(ctx).getBoolean("smart_detect", true)
@@ -55,7 +61,19 @@ object Prefs {
 
     /** Settings (profile) changed on this phone and are not uploaded yet. */
     fun profileDirty(ctx: Context) = p(ctx).getBoolean("profile_dirty", false)
-    fun setProfileDirty(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("profile_dirty", v).apply()
+    fun setProfileDirty(ctx: Context, v: Boolean) {
+        p(ctx).edit().putBoolean("profile_dirty", v).apply()
+        profileDirtyState.value = v
+    }
+
+    private val profileDirtyState = MutableStateFlow(false)
+    private var profileDirtyLoaded = false
+
+    /** Live version of [profileDirty] (for the "changes waiting" counter). */
+    fun profileDirtyFlow(ctx: Context): StateFlow<Boolean> {
+        if (!profileDirtyLoaded) { profileDirtyState.value = profileDirty(ctx); profileDirtyLoaded = true }
+        return profileDirtyState
+    }
 
     /** Phone-clock time of the last local profile change. */
     fun profileLocalUpdated(ctx: Context) = p(ctx).getLong("profile_local_updated", 0L)
@@ -68,7 +86,8 @@ object Prefs {
     /** A setting changed locally: remember it and upload soon. */
     fun markProfileChanged(ctx: Context) {
         p(ctx).edit().putBoolean("profile_dirty", true).putLong("profile_local_updated", System.currentTimeMillis()).apply()
-        SyncScheduler.requestSoon(ctx)
+        profileDirtyState.value = true
+        SyncScheduler.onLocalChange(ctx)
     }
 
     /** Per-account pull cursors (server updated_at, ISO). */
@@ -98,10 +117,13 @@ object Prefs {
             "last_sync_ms", "adopt_note_pending", "initial_load_done", "tracking_start_epoch_day", "reminder_enabled", "smart_detect", "theme_mode",
         )) e.remove(k)
         e.apply()
+        profileDirtyState.value = false
     }
 }
 
 object Extras {
     const val OPEN_ADD_CASH = "open_add_cash"
     const val TXN_ID = "txn_id"
+    /** remoteId of the person to open in the Lending tab (money reminder tap). */
+    const val LOAN_PERSON_ID = "loan_person_id"
 }

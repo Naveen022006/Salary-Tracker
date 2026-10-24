@@ -6,6 +6,7 @@ import android.os.Build
 import android.util.Log
 import com.local.salarytracker.BudgetService
 import com.local.salarytracker.Prefs
+import com.local.salarytracker.cloud.SyncScheduler
 import com.local.salarytracker.data.AppDatabase
 import com.local.salarytracker.data.Repository
 import com.local.salarytracker.model.TxnSource
@@ -71,6 +72,7 @@ object Capture {
         alert: Boolean,
     ): String {
         val e = repo.addCaptured(parsed, source, sender, timestamp, raw) ?: return "duplicate or already saved"
+        SyncScheduler.onLocalChange(ctx) // new row: upload when internet is there (also when the app is closed)
         if (alert && e.type == TxnType.DEBIT && !e.excluded) {
             val left = BudgetService.snapshotNow(ctx, repo, repo.getSettings()).leftTodayPaise
             Notifier.showCapture(ctx, e, left)

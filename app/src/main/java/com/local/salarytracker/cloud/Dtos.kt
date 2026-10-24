@@ -1,6 +1,10 @@
 package com.local.salarytracker.cloud
 
 import com.local.salarytracker.data.CategoryRuleEntity
+import com.local.salarytracker.data.LoanEntryEntity
+import com.local.salarytracker.data.PersonEntity
+import com.local.salarytracker.model.LoanKind
+import com.local.salarytracker.model.LoanMethod
 import com.local.salarytracker.data.SettingsEntity
 import com.local.salarytracker.data.TxnEntity
 import com.local.salarytracker.model.Category
@@ -10,6 +14,7 @@ import com.local.salarytracker.model.TxnType
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.Instant
+import java.time.LocalDate
 import java.time.OffsetDateTime
 
 /* Wire formats for the three cloud tables. There is deliberately NO field for rawText: the original SMS /
@@ -208,3 +213,130 @@ fun SettingsEntity.toPush(userId: String, x: ProfileExtras) = ProfilePush(
     themeMode = x.themeMode.name,
     onboardingDone = onboardingDone,
 )
+
+// ---------------------------------------------------------------- lending (tables people, loan_entries; SQL 0003)
+/* No local ids on the wire: the client UUID (remoteId) is the row id, person_id = the person's remoteId. */
+
+@Serializable
+data class PersonPush(
+    @SerialName("id") val id: String,
+    @SerialName("user_id") val userId: String,
+    @SerialName("name") val name: String,
+    @SerialName("phone") val phone: String?,
+    @SerialName("note") val note: String?,
+    @SerialName("deleted") val deleted: Boolean,
+    @SerialName("created_at") val createdAt: String,
+)
+
+@Serializable
+data class PersonPull(
+    @SerialName("id") val id: String,
+    @SerialName("name") val name: String,
+    @SerialName("phone") val phone: String? = null,
+    @SerialName("note") val note: String? = null,
+    @SerialName("deleted") val deleted: Boolean = false,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String,
+)
+
+@Serializable
+data class LoanPush(
+    @SerialName("id") val id: String,
+    @SerialName("user_id") val userId: String,
+    @SerialName("person_id") val personId: String,
+    @SerialName("kind") val kind: String,
+    @SerialName("amount_paise") val amountPaise: Long,
+    @SerialName("method") val method: String,
+    @SerialName("app_name") val appName: String?,
+    @SerialName("occurred_at") val occurredAt: String,
+    /** ISO date yyyy-MM-dd or null. */
+    @SerialName("due_date") val dueDate: String?,
+    @SerialName("note") val note: String?,
+    @SerialName("deleted") val deleted: Boolean,
+)
+
+@Serializable
+data class LoanPull(
+    @SerialName("id") val id: String,
+    @SerialName("person_id") val personId: String,
+    @SerialName("kind") val kind: String,
+    @SerialName("amount_paise") val amountPaise: Long,
+    @SerialName("method") val method: String = "OTHER",
+    @SerialName("app_name") val appName: String? = null,
+    @SerialName("occurred_at") val occurredAt: String,
+    @SerialName("due_date") val dueDate: String? = null,
+    @SerialName("note") val note: String? = null,
+    @SerialName("deleted") val deleted: Boolean = false,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("updated_at") val updatedAt: String,
+)
+
+/** Server column limits of the lending tables (see 0003_lending.sql). Longer values are cut instead of rejected. */
+object LendingLimits {
+    const val NAME = 80
+    const val PHONE = 20
+    const val NOTE = 500
+    const val APP_NAME = 40
+}
+
+fun PersonEntity.toPush(userId: String) = PersonPush(
+    id = remoteId,
+    userId = userId,
+    name = name.take(LendingLimits.NAME),
+    phone = phone.cut(LendingLimits.PHONE),
+    note = note.cut(LendingLimits.NOTE),
+    deleted = deleted,
+    createdAt = Instant.ofEpochMilli(createdAt).toString(),
+)
+
+/** Remote person -> local row ([existing] keeps its local id). Null when the row cannot be read. */
+fun PersonPull.toEntity(existing: PersonEntity?): PersonEntity? = try {
+    PersonEntity(
+        id = existing?.id ?: 0,
+        remoteId = id,
+        name = name,
+        phone = phone,
+        note = note,
+        createdAt = createdAt?.let { parseInstant(it).toEpochMilli() } ?: existing?.createdAt ?: System.currentTimeMillis(),
+        updatedAt = parseInstant(updatedAt).toEpochMilli(),
+        deleted = false,
+        dirty = false,
+    )
+} catch (_: Exception) {
+    null
+}
+
+fun LoanEntryEntity.toPush(userId: String) = LoanPush(
+    id = remoteId,
+    userId = userId,
+    personId = personRemoteId,
+    kind = kind.name,
+    amountPaise = amountPaise,
+    method = method.name,
+    appName = appName.cut(LendingLimits.APP_NAME),
+    occurredAt = Instant.ofEpochMilli(occurredAt).toString(),
+    dueDate = dueLocalDate?.toString(),
+    note = note.cut(LendingLimits.NOTE),
+    deleted = deleted,
+)
+
+/** Remote entry -> local row. Null for rows this app version cannot read (unknown kind, bad date ...). */
+fun LoanPull.toEntity(existing: LoanEntryEntity?): LoanEntryEntity? = try {
+    LoanEntryEntity(
+        id = existing?.id ?: 0,
+        remoteId = id,
+        personRemoteId = personId,
+        kind = requireNotNull(LoanKind.fromName(kind)),
+        amountPaise = amountPaise,
+        method = LoanMethod.fromName(method),
+        appName = appName,
+        occurredAt = parseInstant(occurredAt).toEpochMilli(),
+        dueDate = dueDate?.let { LocalDate.parse(it.take(10)).toString() },
+        note = note,
+        updatedAt = parseInstant(updatedAt).toEpochMilli(),
+        deleted = false,
+        dirty = false,
+    )
+} catch (_: Exception) {
+    null
+}

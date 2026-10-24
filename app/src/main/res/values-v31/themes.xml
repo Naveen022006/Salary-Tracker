@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.SalaryTracker.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#FF007AFF</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/avd_splash_ring</item>
+        <item name="windowSplashScreenAnimationDuration">600</item>
+        <item name="postSplashScreenTheme">@style/Theme.SalaryTracker</item>
+    </style>
+</resources>

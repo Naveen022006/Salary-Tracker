@@ -42,6 +42,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import io.github.jan.supabase.auth.auth
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOn
@@ -120,6 +122,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         repo.settings.map<SettingsEntity, SettingsEntity?> { it }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val settingsNN = settings.filterNotNull()
+
+    /** Splash hand-off: settings are loaded and the sign-in state is known (Login vs Today can be drawn). */
+    val isFirstScreenReady = MutableStateFlow(false)
+
+    /** Set by MainActivity when the splash starts leaving; drives the content entrance animation. */
+    val splashExiting = MutableStateFlow(false)
+
+    init {
+        viewModelScope.launch {
+            val sessionKnown = if (com.local.salarytracker.cloud.CloudConfig.isConfigured) {
+                com.local.salarytracker.cloud.Cloud.client.auth.sessionStatus
+                    .map { it !is io.github.jan.supabase.auth.status.SessionStatus.Initializing }
+            } else kotlinx.coroutines.flow.flowOf(true)
+            combine(settings, sessionKnown) { st, known -> st != null && known }
+                .first { it }
+            isFirstScreenReady.value = true
+        }
+    }
 
     /** First day counted for the budget (kept in Prefs, no DB change). null until onboarding is done. */
     val trackingStart = MutableStateFlow(Prefs.trackingStart(app))

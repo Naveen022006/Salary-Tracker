@@ -3,4 +3,11 @@
     <style name="Theme.SalaryTracker" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">#FF101411</item>
     </style>
+
+    <style name="Theme.SalaryTracker.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#FF007AFF</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_static</item>
+        <item name="windowSplashScreenAnimationDuration">600</item>
+        <item name="postSplashScreenTheme">@style/Theme.SalaryTracker</item>
+    </style>
 </resources>

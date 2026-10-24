@@ -1,6 +1,28 @@
 package com.local.salarytracker
 
+import android.animation.Animator
+import android.animation.AnimatorSet
+import android.animation.ObjectAnimator
+import android.animation.PropertyValuesHolder
+import android.animation.ValueAnimator
 import android.content.Intent
+import android.os.SystemClock
+import android.provider.Settings
+import android.view.View
+import android.view.animation.LinearInterpolator
+import android.view.animation.PathInterpolator
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
+import androidx.core.animation.doOnEnd
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.splashscreen.SplashScreenViewProvider
 import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -22,6 +44,15 @@ class MainActivity : ComponentActivity() {
 
     @android.annotation.SuppressLint("InvalidFragmentVersionForActivityResult")
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splash = installSplashScreen()
+        val motion = motionEnabled()
+        val t0 = SystemClock.uptimeMillis()
+        splash.setKeepOnScreenCondition {
+            // Hard cap so start is never held up (600 ms with motion; 1.5 s safety cap when animations are off,
+            // so a sign-in state that never resolves can't leave the splash up forever).
+            !vm.isFirstScreenReady.value && SystemClock.uptimeMillis() - t0 < (if (motion) 600L else 1500L)
+        }
+        splash.setOnExitAnimationListener { provider -> exitSplash(provider, motion) }
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         // Registered here (not in composition) so the contact-picker result is delivered even if the screen was rebuilt meanwhile.
@@ -51,7 +82,57 @@ class MainActivity : ComponentActivity() {
                 )
                 onDispose {}
             }
-            SalaryTrackerTheme(darkTheme = dark) { AppRoot(vm) }
+            val exiting by vm.splashExiting.collectAsStateWithLifecycle()
+            val progress by animateFloatAsState(
+                targetValue = if (exiting) 1f else 0f,
+                animationSpec = if (motion) tween(280, easing = FastOutSlowInEasing) else snap(),
+                label = "contentEntrance",
+            )
+            val rise = with(LocalDensity.current) { 12.dp.toPx() }
+            SalaryTrackerTheme(darkTheme = dark) {
+                Box(Modifier.graphicsLayer {
+                    alpha = progress
+                    translationY = (1f - progress) * rise
+                }) { AppRoot(vm) }
+            }
+        }
+    }
+
+    private fun motionEnabled(): Boolean =
+        ValueAnimator.areAnimatorsEnabled() &&
+            Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
+
+    private fun exitSplash(provider: SplashScreenViewProvider, motion: Boolean) {
+        vm.splashExiting.value = true
+        if (!motion) {
+            provider.remove()
+            return
+        }
+        val splashView = provider.view
+        val icon = try { provider.iconView } catch (_: Throwable) { null }
+        val animators = ArrayList<Animator>()
+        animators += ObjectAnimator.ofFloat(splashView, View.ALPHA, 1f, 0f).apply {
+            duration = 220L
+            interpolator = LinearInterpolator()
+        }
+        if (icon != null) {
+            animators += ObjectAnimator.ofPropertyValuesHolder(
+                icon,
+                PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.08f),
+                PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.08f),
+            ).apply {
+                duration = 220L
+                interpolator = PathInterpolator(0.4f, 0f, 1f, 1f) // FastOutLinearIn
+            }
+            animators += ObjectAnimator.ofFloat(icon, View.ALPHA, 1f, 0f).apply {
+                duration = 220L
+                interpolator = LinearInterpolator()
+            }
+        }
+        AnimatorSet().apply {
+            playTogether(animators)
+            doOnEnd { provider.remove() }
+            start()
         }
     }
 

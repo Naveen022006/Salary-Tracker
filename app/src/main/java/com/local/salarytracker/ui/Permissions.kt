@@ -114,17 +114,17 @@ fun PermissionCard(
 ) {
     SectionCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center,
-            ) { Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
+            com.local.salarytracker.ui.components.IconTile(icon, com.local.salarytracker.ui.theme.AppColors.current.accent, size = 36.dp)
             Spacer(Modifier.width(12.dp))
             Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             if (granted) StatusChip(ok = true)
         }
         Text(why, modifier = Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (!granted) {
-            FilledTonalButton(onClick = onAllow, modifier = Modifier.padding(top = 12.dp).fillMaxWidth()) { Text(buttonLabel) }
+            com.local.salarytracker.ui.components.CapsuleButton(
+                buttonLabel, onClick = onAllow, modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
+                style = com.local.salarytracker.ui.components.ButtonStyle.Tinted, small = true,
+            )
         }
         if (extra != null) extra()
     }

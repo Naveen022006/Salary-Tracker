@@ -25,6 +25,7 @@ data class SpendItem(
     val excluded: Boolean,
     val type: TxnType,
     val merchant: String? = null,
+    val custom: String? = null,
 ) {
     /** Only non-excluded debits are spending. */
     val isSpend: Boolean get() = type == TxnType.DEBIT && !excluded
@@ -66,7 +67,8 @@ data class BudgetSnapshot(
     val budgetPaise: Long = spendablePaise,
 )
 
-data class CategoryTotal(val category: Category, val amountPaise: Long)
+/** [custom] = the user's own category name (then [category] is OTHER). */
+data class CategoryTotal(val category: Category, val amountPaise: Long, val custom: String? = null)
 data class MerchantTotal(val merchant: String, val amountPaise: Long, val count: Int, val category: Category? = null)
 data class DailyPoint(val date: LocalDate, val dailySpendPaise: Long, val fixedSpendPaise: Long, val allowancePaise: Long)
 
@@ -203,8 +205,8 @@ object BudgetEngine {
         val beforeAll = trackingStart != null && trackingStart.isAfter(period.endInclusive)
         val firstDay = if (beforeAll) period.start else snap.trackingStart ?: period.start
         val spend = txns.filter { it.isSpend && it.date in period && !it.date.isBefore(firstDay) && !it.date.isAfter(lastDay) }
-        val byCat = spend.groupBy { it.category }
-            .map { (c, l) -> CategoryTotal(c, l.sumOf { it.amountPaise }) }
+        val byCat = spend.groupBy { it.category to it.custom?.lowercase() }
+            .map { (k, l) -> CategoryTotal(k.first, l.sumOf { it.amountPaise }, l.first().custom) }
             .sortedByDescending { it.amountPaise }
         var under = 0
         var over = 0

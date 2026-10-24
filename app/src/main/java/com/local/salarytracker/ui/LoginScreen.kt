@@ -1,5 +1,7 @@
 package com.local.salarytracker.ui
 
+import com.local.salarytracker.ui.components.AppWallpaper
+import com.local.salarytracker.ui.components.CapsuleShape
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -62,9 +64,8 @@ fun LoginScreen(vm: AppViewModel) {
     val configured = CloudConfig.isConfigured
     val working = login == LoginState.Working
 
-    Box(
-        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(hero.heroStart, hero.heroEnd))),
-    ) {
+    Box(Modifier.fillMaxSize()) {
+        AppWallpaper(Modifier.fillMaxSize(), strong = true)
         Column(
             Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -75,23 +76,17 @@ fun LoginScreen(vm: AppViewModel) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                // App mark: rupee sign on a soft circle
-                Box(
-                    Modifier.size(96.dp).clip(CircleShape).background(hero.onHero.copy(alpha = 0.14f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("₹", fontSize = 52.sp, fontWeight = FontWeight.Bold, color = hero.heroAccent)
-                }
+                AppMark(96.dp)
                 Text(
                     "Salary Tracker",
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = hero.onHero,
+                    style = MaterialTheme.typography.headlineLarge,
+                    color = hero.label,
                     textAlign = TextAlign.Center,
                 )
                 Text(
                     "Know what you can spend today",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = hero.onHero.copy(alpha = 0.85f),
+                    color = hero.secondaryLabel,
                     textAlign = TextAlign.Center,
                 )
             }
@@ -114,24 +109,25 @@ fun LoginScreen(vm: AppViewModel) {
                         login.text,
                         modifier = Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
                         style = MaterialTheme.typography.bodyMedium,
-                        color = hero.heroOver,
+                        color = hero.danger,
                         textAlign = TextAlign.Center,
                     )
                 }
                 Button(
                     onClick = { vm.account.signIn(ctx) },
                     enabled = configured && !working,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                    shape = RoundedCornerShape(28.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp),
+                    shape = CapsuleShape,
+                    border = androidx.compose.foundation.BorderStroke(0.5.dp, hero.separator),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White,
-                        contentColor = Color(0xFF1F1F1F),
-                        disabledContainerColor = Color.White.copy(alpha = 0.55f),
-                        disabledContentColor = Color(0xFF1F1F1F).copy(alpha = 0.6f),
+                        containerColor = hero.card,
+                        contentColor = hero.label,
+                        disabledContainerColor = hero.card.copy(alpha = 0.6f),
+                        disabledContentColor = hero.label.copy(alpha = 0.5f),
                     ),
                 ) {
                     if (working) {
-                        CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp, color = Color(0xFF1F1F1F))
+                        CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp, color = hero.label)
                         Spacer(Modifier.size(12.dp))
                         Text("Signing in...", style = MaterialTheme.typography.titleMedium)
                     } else {
@@ -143,7 +139,7 @@ fun LoginScreen(vm: AppViewModel) {
                 Text(
                     "Your data is saved in your own private account. SMS text never leaves your phone.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = hero.onHero.copy(alpha = 0.8f),
+                    color = hero.secondaryLabel,
                     textAlign = TextAlign.Center,
                 )
                 Spacer(Modifier.height(8.dp))
@@ -194,4 +190,16 @@ fun WipeConfirmDialog(onRemove: () -> Unit, onSignOut: () -> Unit) {
         confirmButton = { TextButton(onClick = onRemove) { Text("Remove and load mine", color = AppColors.current.danger) } },
         dismissButton = { TextButton(onClick = onSignOut) { Text("Sign out") } },
     )
+}
+
+/** App mark: white rupee on a blue rounded square (app-icon style). */
+@Composable
+fun AppMark(size: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier) {
+    Box(
+        modifier.size(size).clip(RoundedCornerShape(size * 0.23f))
+            .background(Brush.linearGradient(listOf(Color(0xFF3A9BFF), Color(0xFF0060DF)))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("₹", fontSize = (size.value * 0.54f).sp, fontWeight = FontWeight.Bold, color = Color.White)
+    }
 }

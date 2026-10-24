@@ -221,6 +221,44 @@ class MigrationSqlTest {
         assertTrue(indexNames().contains("index_assistant_message_createdAt"))
     }
 
+    // ------------------------------------------------------------ v4 -> v5 (Spending map places)
+    @Test fun placesMigrationKeepsDataAndMatchesRoomsExportedV5Schema() {
+        val v4 = v3Tables + listOf("assistant_message", "category_limit")
+        v4.forEach { t -> createSql(4, t).forEach(::exec) }
+        exec("INSERT INTO txn (amountPaise,type,timestamp,category,source,excluded,createdAt,remoteId,updatedAt,deleted,dirty) VALUES (500,'DEBIT',3000,'FOOD','MANUAL',0,3333,'r-9',3333,0,0)")
+        MigrationSql.V4_TO_V5.forEach(::exec)
+        MigrationSql.V4_TO_V5.forEach(::exec) // IF NOT EXISTS
+        assertEquals(1, count("txn"))
+        exec("INSERT INTO txn_place (txnRemoteId,lat,lng,accuracyM,savedAt) VALUES ('r-9',13.08,80.27,12.0,1)")
+        assertEquals(1, count("txn_place"))
+        val migrated = columns("txn_place")
+
+        db.close()
+        db = DriverManager.getConnection("jdbc:sqlite::memory:")
+        createSql(5, "txn_place").forEach(::exec)
+        assertEquals("columns of txn_place", columns("txn_place").sortedBy { it.name }, migrated.sortedBy { it.name })
+    }
+
+    // ------------------------------------------------------------ v5 -> v6 (own categories)
+    @Test fun ownCategoriesMigrationKeepsDataAndMatchesRoomsExportedV6Schema() {
+        val v5 = v3Tables + listOf("assistant_message", "category_limit", "txn_place")
+        v5.forEach { t -> createSql(5, t).forEach(::exec) }
+        exec("INSERT INTO txn (amountPaise,type,timestamp,category,source,excluded,createdAt,remoteId,updatedAt,deleted,dirty) VALUES (500,'DEBIT',3000,'OTHER','MANUAL',0,3333,'r-9',3333,0,0)")
+        MigrationSql.V5_TO_V6.forEach(::exec)
+        assertEquals(1, count("txn"))
+        exec("INSERT INTO custom_category (name,emoji,color,createdAt) VALUES ('Gym','x',1,1)")
+        val migrated = listOf("txn", "custom_category").associateWith { columns(it) }
+        val migratedIndexes = indexNames()
+
+        db.close()
+        db = DriverManager.getConnection("jdbc:sqlite::memory:")
+        listOf("txn", "custom_category").forEach { t -> createSql(6, t).forEach(::exec) }
+        for (t in migrated.keys) {
+            assertEquals("columns of $t", columns(t).sortedBy { it.name }, migrated.getValue(t).sortedBy { it.name })
+        }
+        assertTrue(migratedIndexes.containsAll(indexNames()))
+    }
+
     private fun indexNames(): List<String> = db.createStatement().use { st ->
         st.executeQuery("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'index_%' ORDER BY name").use { rs ->
             buildList { while (rs.next()) add(rs.getString(1)) }

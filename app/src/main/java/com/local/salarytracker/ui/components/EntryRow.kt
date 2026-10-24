@@ -36,27 +36,29 @@ fun EntryRow(t: TxnEntity, zone: ZoneId, modifier: Modifier = Modifier, onClick:
     val colors = AppColors.current
     val title = t.merchant?.takeIf { it.isNotBlank() }
         ?: t.note?.takeIf { it.isNotBlank() }
-        ?: if (credit) "Money received" else t.category.displayName
+        ?: if (credit) "Money received" else categoryName(t.category, t.customCategory)
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val source = when (t.source) {
         TxnSource.SMS -> "SMS"
         TxnSource.NOTIFICATION -> AppLabels.label(ctx, t.sender)?.let { "App alert · $it" } ?: "App alert"
         TxnSource.MANUAL -> "Cash"
     }
-    val sub = Fmt.time(t.timestamp, zone) + " · " + source + if (t.excluded) " · Not spending" else ""
+    // "What it was for" (the note) after the name, when both are there.
+    val use = t.note?.takeIf { it.isNotBlank() && !t.merchant.isNullOrBlank() && it != t.merchant }
+    val sub = Fmt.time(t.timestamp, zone) + " · " + source + (use?.let { " · $it" } ?: "") + if (t.excluded) " · Not spending" else ""
     Row(
-        modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp).clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier.fillMaxWidth().defaultMinSize(minHeight = 60.dp).clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CategoryIcon(t.category, 40.dp, credit = credit)
+        CategoryIcon(t.category, 40.dp, credit = credit, custom = t.customCategory)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 sub,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = colors.secondaryLabel,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -71,7 +73,7 @@ fun EntryRow(t: TxnEntity, zone: ZoneId, modifier: Modifier = Modifier, onClick:
             textAlign = TextAlign.End,
             color = when {
                 credit -> colors.credit
-                t.excluded -> MaterialTheme.colorScheme.onSurfaceVariant
+                t.excluded -> colors.secondaryLabel
                 else -> MaterialTheme.colorScheme.onSurface
             },
         )

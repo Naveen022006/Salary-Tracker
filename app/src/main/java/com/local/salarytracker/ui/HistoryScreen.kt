@@ -1,5 +1,18 @@
 package com.local.salarytracker.ui
 
+import com.local.salarytracker.ui.components.ScrollToTopEffect
+import androidx.compose.foundation.layout.size
+import com.local.salarytracker.ui.components.AppleChip
+import com.local.salarytracker.ui.components.CapsuleButton
+import com.local.salarytracker.ui.components.ButtonStyle
+import com.local.salarytracker.ui.components.CapsuleShape
+import com.local.salarytracker.ui.components.tint
+import com.local.salarytracker.ui.theme.AppColors
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.Column
+import com.local.salarytracker.ui.components.Hairline
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -71,7 +84,7 @@ fun HistoryScaffold(vm: AppViewModel, content: @Composable (PaddingValues) -> Un
     BackHandler(enabled = open) { vm.closeHistorySearch() }
     ScreenScaffold(
         title = "History",
-        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
+        hasNavigation = open,
         titleContent = if (open) {
             { SearchField(query) { vm.historyQuery.value = it } }
         } else null,
@@ -110,9 +123,11 @@ internal fun SearchField(query: String, placeholder: String = "Search shop or no
         textStyle = MaterialTheme.typography.bodyLarge,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = {}),
+        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = AppColors.current.secondaryLabel) },
+        shape = CapsuleShape,
         colors = TextFieldDefaults.colors(
-            focusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-            unfocusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
+            focusedContainerColor = AppColors.current.fill3,
+            unfocusedContainerColor = AppColors.current.fill3,
             focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
             unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
         ),
@@ -134,12 +149,17 @@ fun HistoryScreen(vm: AppViewModel, padding: PaddingValues) {
     val query = vm.historyQuery.collectAsStateWithLifecycle().value.trim()
     var catName by rememberSaveable { mutableStateOf<String?>(null) }
     var srcName by rememberSaveable { mutableStateOf<String?>(null) }
-    val catFilter = catName?.let { Category.fromName(it) }
+    // "C:<name>" = one of the user's own categories; else a built-in category name.
+    val ownFilter = catName?.let { com.local.salarytracker.data.CustomCategories.fromCloud(it) }
+    val catFilter = if (ownFilter == null) catName?.let { Category.fromName(it) } else null
+    val customs = vm.customCategories.collectAsStateWithLifecycle().value
+    val hidden = vm.hiddenCategories.collectAsStateWithLifecycle().value
     val srcFilter = srcName?.let { n -> TxnSource.entries.firstOrNull { it.name == n } }
     var sourceMenu by remember { mutableStateOf(false) }
 
     val filtered = state.txns.filter { t ->
-        (catFilter == null || t.category == catFilter) &&
+        (catFilter == null || (t.category == catFilter && t.customCategory == null)) &&
+            (ownFilter == null || t.customCategory.equals(ownFilter, ignoreCase = true)) &&
             (srcFilter == null || t.source == srcFilter) &&
             (query.isEmpty() || t.merchant?.contains(query, ignoreCase = true) == true || t.note?.contains(query, ignoreCase = true) == true)
     }
@@ -149,7 +169,7 @@ fun HistoryScreen(vm: AppViewModel, padding: PaddingValues) {
         .sortedByDescending { it.first }
         .map { (d, l) -> d to l.sortedByDescending { it.timestamp } }
     val spent = filtered.filter { it.type == TxnType.DEBIT && !it.excluded }.sumOf { it.amountPaise }
-    val anyFilter = catFilter != null || srcFilter != null || query.isNotEmpty()
+    val anyFilter = catFilter != null || ownFilter != null || srcFilter != null || query.isNotEmpty()
 
     fun clearFilters() {
         catName = null
@@ -157,7 +177,10 @@ fun HistoryScreen(vm: AppViewModel, padding: PaddingValues) {
         vm.historyQuery.value = ""
     }
 
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    ScrollToTopEffect(listState)
     LazyColumn(
+        state = listState,
         contentPadding = PaddingValues(top = padding.calculateTopPadding(), bottom = padding.calculateBottomPadding() + 16.dp),
     ) {
         item(key = "period") {
@@ -187,11 +210,11 @@ fun HistoryScreen(vm: AppViewModel, padding: PaddingValues) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box {
-                    FilterChip(
+                    AppleChip(
+                        "Source: " + SOURCES.first { it.first == srcFilter }.second,
                         selected = srcFilter != null,
                         onClick = { sourceMenu = true },
-                        label = { Text("Source: " + SOURCES.first { it.first == srcFilter }.second) },
-                        trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = "Choose source") },
+                        trailing = { Icon(Icons.Filled.ArrowDropDown, contentDescription = "Choose source", modifier = Modifier.size(18.dp)) },
                     )
                     DropdownMenu(expanded = sourceMenu, onDismissRequest = { sourceMenu = false }) {
                         for ((src, name) in SOURCES) {
@@ -202,12 +225,23 @@ fun HistoryScreen(vm: AppViewModel, padding: PaddingValues) {
                         }
                     }
                 }
-                for (c in Category.entries) {
-                    FilterChip(
+                for (c in Category.entries.filter { it.name !in hidden || catFilter == it }) {
+                    AppleChip(
+                        c.label,
                         selected = catFilter == c,
                         onClick = { catName = if (catFilter == c) null else c.name },
-                        label = { Text(c.label) },
-                        leadingIcon = { CategoryIcon(c, 24.dp) },
+                        color = c.tint(),
+                        leading = { CategoryIcon(c, 22.dp) },
+                    )
+                }
+                for (own in customs) {
+                    val on = ownFilter.equals(own.name, ignoreCase = true)
+                    AppleChip(
+                        own.name,
+                        selected = on,
+                        onClick = { catName = if (on) null else com.local.salarytracker.data.CustomCategories.toCloud(own.name) },
+                        color = androidx.compose.ui.graphics.Color(own.color),
+                        leading = { CategoryIcon(Category.OTHER, 22.dp, custom = own.name) },
                     )
                 }
             }
@@ -218,7 +252,8 @@ fun HistoryScreen(vm: AppViewModel, padding: PaddingValues) {
                     EmptyState(
                         icon = Icons.AutoMirrored.Filled.ReceiptLong,
                         title = "No entries in this month",
-                        text = "Bank SMS and payment alerts show up here by themselves.",
+                        text = "Bank SMS and payment alerts show up here by themselves. Paid in cash? Add it.",
+                        action = { CapsuleButton("Add cash", onClick = { vm.openAddCash() }, style = ButtonStyle.Tinted, small = true) },
                     )
                 } else {
                     EmptyState(
@@ -226,7 +261,7 @@ fun HistoryScreen(vm: AppViewModel, padding: PaddingValues) {
                         title = "No entries for these filters",
                         text = if (query.isNotEmpty()) "Try a different word." else "Try a different filter.",
                         action = if (anyFilter) {
-                            { OutlinedButton(onClick = { clearFilters() }) { Text("Clear filters") } }
+                            { CapsuleButton("Clear filters", onClick = { clearFilters() }, style = ButtonStyle.Tinted, small = true) }
                         } else null,
                     )
                 }
@@ -235,22 +270,32 @@ fun HistoryScreen(vm: AppViewModel, padding: PaddingValues) {
         for ((day, list) in groups) {
             stickyHeader(key = "h$day") {
                 val total = list.filter { it.type == TxnType.DEBIT && !it.excluded }.sumOf { it.amountPaise }
+                // Frosted sticky day header (the list itself is the blur source, so it cannot blur itself).
                 Row(
-                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp, vertical = 8.dp),
+                    Modifier.fillMaxWidth().background(AppColors.current.grouped.copy(alpha = 0.94f))
+                        .padding(start = 32.dp, end = 32.dp, top = 14.dp, bottom = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        Fmt.dayLabel(day, today),
+                        Fmt.dayLabel(day, today).uppercase(),
                         modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = AppColors.current.secondaryLabel,
                     )
-                    if (total > 0) MoneyText(total, style = MoneyStyle.Small, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (total > 0) MoneyText(total, style = MoneyStyle.Small, color = AppColors.current.secondaryLabel)
                 }
             }
-            items(list, key = { it.id }) { t ->
-                EntryRow(t, vm.zone) { vm.openEntry(t.id) }
-                HorizontalDivider(Modifier.padding(start = 68.dp, end = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            itemsIndexed(list, key = { _, t -> t.id }) { i, t ->
+                // Rows of one day form an inset grouped section (rounded top on the first row, bottom on the last).
+                val top = if (i == 0) 20.dp else 0.dp
+                val bottom = if (i == list.lastIndex) 20.dp else 0.dp
+                Column(
+                    Modifier.padding(horizontal = 16.dp).clip(RoundedCornerShape(top, top, bottom, bottom))
+                        .background(AppColors.current.card),
+                ) {
+                    EntryRow(t, vm.zone) { vm.openEntry(t.id) }
+                    if (i < list.lastIndex) Hairline(start = 68.dp)
+                }
             }
         }
     }

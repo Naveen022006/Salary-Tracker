@@ -64,14 +64,18 @@ and choose **Unrestricted**.
 
 ## Screens
 
-- **Today**: "Left today" and "Left this month", today's spending, and the **+ Add cash** button.
+**New look (version 1.5):** the app now looks like Apple's "Liquid Glass" design: see-through glass bars, a floating
+tab bar with a round **+** button (Add cash, or Add person on Lending), big titles, Apple colours and the Inter font.
+**Settings** opens from the round button with your initial at the top right of every tab.
+
+- **Today**: "Left today" and "Left this month", today's spending; add cash spending with the round **+**.
 - **History**: all entries by day. Tap one to change the amount, category or note, mark it "Not
   spending", or delete it. When you change a category, the app can remember it for that shop.
 - **Lending**: people you lend to or borrow from, with balances and return dates.
 - **Report**: salary, spent, saved, a category chart, a daily chart (bars = spending, line = allowance),
   days under/over budget, top places and biggest expenses. Use ◀ ▶ to see older months.
 - **Ask**: a money helper you can chat with (see below).
-- **Settings**: your account (Sync now, Sign out, Delete my cloud data), salary, salary day, savings goal,
+- **Settings** (round button, top right): your account (Sync now, Sign out, Delete my cloud data), salary, salary day, savings goal,
   reminder time, which apps to watch, import SMS, learned categories, delete all data.
 
 ## Daily summary
@@ -140,6 +144,34 @@ lending totals. **Never sent:** SMS or notification text, names of people, phone
 notes, or shop names other than big brands (like Swiggy or Amazon). Names of people you saved in Lending are replaced
 with "a friend" even if you type them. Up to 30 AI questions a day. Setup (once): see step I in
 [`docs/SUPABASE_GOOGLE_SETUP.md`](docs/SUPABASE_GOOGLE_SETUP.md). The API key stays in Supabase; it is never in the app.
+
+## Spending map and the new tab bar (version 1.6)
+
+- The bottom bar now looks and moves like Apple Music: clear glass, and a blue glass lens behind the selected tab that
+  slides (and stretches a little) to the tab you tap. Press and slide your finger along the bar to pick a tab. When you
+  scroll down it shrinks to a round button of the current tab and a "₹2,903 left today" pill; scroll up or tap it to
+  see all tabs again. Tap the tab you are on to jump back to the top of its list.
+- The **+** (Add cash, or Add person on Lending) is now at the top right of the page, next to your account button.
+- Buttons, chips and switches are at least 44 dp tall, so they are easy to tap.
+- The background is plain Apple black (dark) or light grey (light).
+- **Your own categories:** Settings → Salary & budget → **Categories**. Add a category (name, icon, colour), change its
+  look, or remove it (its entries go back to Other; no money is deleted). Turn off built-in categories you never use;
+  they leave the pickers but old entries keep them. You can also tap **New category** in the Add cash sheet. Your own
+  categories sync with your account (saved as "C:Name" in the existing category column, so no Supabase change is
+  needed); their icon and colour stay on this phone.
+- **Spending in "Other"** now asks two things before you save: **What is it?** and **What was it for?** If you often
+  spend on the same thing, tap **Make "…" a category**.
+- **Ask chat:** opens at the newest message, a new answer scrolls to its start, a round button jumps back to the newest
+  message, messages show day and time lines, press and hold a message to copy it, and a failed AI answer has **Try
+  again**.
+- **Places (off by default):** Settings → Places → **Save where I spend**. The app then saves *where* you paid each new
+  expense (one quick location read when the payment happens; it does not track you). Choose **Allow all the time** on
+  the next Android page, so expenses from bank SMS and payment alerts (which arrive while you are in another app) get a
+  place too. You can remove a place in the entry.
+- **Spending map:** Report → **Spending map** (or Settings → Places). Every expense with a place is a dot in its category
+  colour; bigger dots are bigger amounts. Tap a dot to see it. "Show on map" in an entry jumps to its place.
+- Places stay **only on this phone**: not in your cloud account and never sent to the AI. The map pictures come from
+  Mapbox. The map needs a free Mapbox key: see [`docs/MAPBOX_SETUP.md`](docs/MAPBOX_SETUP.md).
 
 ## Build from source (PC)
 

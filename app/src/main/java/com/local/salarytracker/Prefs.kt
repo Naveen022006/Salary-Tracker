@@ -20,6 +20,14 @@ object Prefs {
     fun loanRemindersEnabled(ctx: Context) = p(ctx).getBoolean("loan_reminders", true)
     fun setLoanRemindersEnabled(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("loan_reminders", v).apply()
 
+    /** "Save where I spend" (Spending map). Off until the user turns it on; places stay on this phone. */
+    /** Built-in category names hidden from the pickers (Settings → Categories). */
+    fun hiddenCategories(ctx: Context): Set<String> = p(ctx).getStringSet("hidden_categories", emptySet())?.toSet() ?: emptySet()
+    fun setHiddenCategories(ctx: Context, v: Set<String>) = p(ctx).edit().putStringSet("hidden_categories", v.toSet()).apply()
+
+    fun placesEnabled(ctx: Context) = p(ctx).getBoolean("places_enabled", false)
+    fun setPlacesEnabled(ctx: Context, v: Boolean) = p(ctx).edit().putBoolean("places_enabled", v).apply()
+
     /** Smart mode: also look for completed payments in alerts from apps that are not in the watch list. Default on. */
     fun smartDetect(ctx: Context) = p(ctx).getBoolean("smart_detect", true)
     fun setSmartDetect(ctx: Context, v: Boolean, fromSync: Boolean = false) {

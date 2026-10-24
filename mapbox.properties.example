@@ -1,0 +1,4 @@
+# Copy this file to "mapbox.properties" (same folder, gitignored) and paste your Mapbox PUBLIC token.
+# See docs/MAPBOX_SETUP.md. Leave it empty to build without the Spending map.
+# Only a public token (starts with "pk."). Never put a secret token ("sk.") here.
+MAPBOX_ACCESS_TOKEN=

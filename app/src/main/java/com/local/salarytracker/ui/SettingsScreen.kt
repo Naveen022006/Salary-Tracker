@@ -1,5 +1,15 @@
 package com.local.salarytracker.ui
 
+import androidx.compose.material.icons.filled.Category
+import com.local.salarytracker.ui.components.SheetShape
+import com.local.salarytracker.ui.components.GroupedSection
+import com.local.salarytracker.ui.components.IconTile
+import com.local.salarytracker.ui.components.LocalSettingTint
+import com.local.salarytracker.ui.components.SettingTextStart
+import com.local.salarytracker.ui.components.SegmentedControl
+import com.local.salarytracker.ui.components.RoundGlassButton
+import com.local.salarytracker.ui.components.Hairline
+import com.local.salarytracker.ui.components.appleSwitchColors
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -215,16 +225,17 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
             top = padding.calculateTopPadding() + 8.dp,
             bottom = padding.calculateBottomPadding() + 24.dp,
         ),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp),
     ) {
         item {
-            Group("Account") {
+            Group("Account", AppColors.current.accent) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     val initial = (accountName.ifBlank { accountEmail }).trim().firstOrNull()?.uppercase() ?: "?"
                     Box(
-                        Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                        Modifier.size(56.dp).clip(CircleShape)
+                            .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(androidx.compose.ui.graphics.Color(0xFF8E8E93), androidx.compose.ui.graphics.Color(0xFF636366)))),
                         contentAlignment = Alignment.Center,
-                    ) { Text(initial, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onPrimaryContainer) }
+                    ) { Text(initial, style = MaterialTheme.typography.headlineSmall, color = androidx.compose.ui.graphics.Color.White) }
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f)) {
                         Text(accountName.ifBlank { "Signed in" }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -271,7 +282,7 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
         }
 
         item {
-            Group("Salary & budget") {
+            Group("Salary & budget", AppColors.current.positiveFill) {
                 SettingRow(Icons.Filled.Payments, "Monthly salary", value = Money.formatWhole(s.salaryPaise), onClick = { dialog = "salary" })
                 Divider()
                 SettingRow(
@@ -292,22 +303,29 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
                     value = (ts?.let { Fmt.fullDate(it) } ?: "Today") + ". Earlier days are not counted.",
                     onClick = { pickers.date(ts ?: java.time.LocalDate.now(), max = java.time.LocalDate.now()) { vm.setTrackingStart(it) } },
                 )
+                Divider()
+                val ownCount = vm.customCategories.collectAsStateWithLifecycle().value.size
+                SettingRow(
+                    Icons.Filled.Category, "Categories",
+                    value = if (ownCount == 0) "Add your own, hide ones you don't use" else "$ownCount of your own · add or remove",
+                    onClick = { vm.categoriesOpen.value = true },
+                )
             }
         }
 
         item {
-            Group("Reminders") {
+            Group("Reminders", AppColors.current.warningFill) {
                 SettingRow(
                     Icons.Filled.NotificationsActive, "Daily summary", value = "Every evening: what you spent, what is left and how to save.",
                     onClick = { reminderOn = !reminderOn; vm.setReminderEnabled(reminderOn) },
-                    trailing = { Switch(checked = reminderOn, onCheckedChange = { reminderOn = it; vm.setReminderEnabled(it) }) },
+                    trailing = { Switch(colors = appleSwitchColors(), checked = reminderOn, onCheckedChange = { reminderOn = it; vm.setReminderEnabled(it) }) },
                 )
                 Divider()
                 SettingRow(
                     Icons.Filled.Handshake, "Money return reminders", value = "Tells you at 10 AM when money is due back.",
                     onClick = { loanReminderOn = !loanReminderOn; Prefs.setLoanRemindersEnabled(ctx, loanReminderOn); LoanDueScheduler.sync(ctx) },
                     trailing = {
-                        Switch(checked = loanReminderOn, onCheckedChange = { loanReminderOn = it; Prefs.setLoanRemindersEnabled(ctx, it); LoanDueScheduler.sync(ctx) })
+                        Switch(colors = appleSwitchColors(), checked = loanReminderOn, onCheckedChange = { loanReminderOn = it; Prefs.setLoanRemindersEnabled(ctx, it); LoanDueScheduler.sync(ctx) })
                     },
                 )
                 Divider()
@@ -331,18 +349,18 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
         }
 
         item {
-            Group("Automatic tracking") {
+            Group("Automatic tracking", androidx.compose.ui.graphics.Color(0xFFAF52DE)) {
                 SettingRow(
                     Icons.Filled.Sms, "Bank SMS", value = "Reads messages about money you spend.",
                     onClick = { toggleSms(vm, s, perm.sms, actions.askSms) },
-                    trailing = { Switch(checked = s.smsEnabled, onCheckedChange = { toggleSms(vm, s, perm.sms, actions.askSms) }) },
+                    trailing = { Switch(colors = appleSwitchColors(), checked = s.smsEnabled, onCheckedChange = { toggleSms(vm, s, perm.sms, actions.askSms) }) },
                 )
                 PermLine(perm.sms, "Allow", actions.askSms)
                 Divider()
                 SettingRow(
                     Icons.Filled.Notifications, "Payment app alerts", value = "Reads alerts from GPay, PhonePe and others.",
                     onClick = { vm.updateSettings { it.copy(notifEnabled = !s.notifEnabled) } },
-                    trailing = { Switch(checked = s.notifEnabled, onCheckedChange = { on -> vm.updateSettings { it.copy(notifEnabled = on) } }) },
+                    trailing = { Switch(colors = appleSwitchColors(), checked = s.notifEnabled, onCheckedChange = { on -> vm.updateSettings { it.copy(notifEnabled = on) } }) },
                 )
                 PermLine(perm.listener, "Open settings", actions.openListenerSettings)
                 if (!perm.listener) {
@@ -362,13 +380,15 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
                 SettingRow(
                     Icons.Filled.NotificationAdd, "Alert for each new expense", value = "A small alert like \"₹250 · Swiggy · Food\".",
                     onClick = { vm.updateSettings { it.copy(alertOnCapture = !s.alertOnCapture) } },
-                    trailing = { Switch(checked = s.alertOnCapture, onCheckedChange = { on -> vm.updateSettings { it.copy(alertOnCapture = on) } }) },
+                    trailing = { Switch(colors = appleSwitchColors(), checked = s.alertOnCapture, onCheckedChange = { on -> vm.updateSettings { it.copy(alertOnCapture = on) } }) },
                 )
             }
         }
 
+        item { PlacesGroup(vm) }
+
         item {
-            Group("Data") {
+            Group("Data", androidx.compose.ui.graphics.Color(0xFF5856D6)) {
                 SettingRow(Icons.Filled.Sync, "Import old SMS", value = "Fill in past spending from bank messages.", onClick = { vm.resetImportState(); dialog = "import" })
                 Divider()
                 SettingRow(
@@ -380,34 +400,23 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
         }
 
         item {
-            Group("Appearance") {
+            Group("Appearance", androidx.compose.ui.graphics.Color(0xFF8E8E93)) {
                 SettingRow(Icons.Filled.Palette, "Theme")
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
-                    val modes = listOf(ThemeMode.SYSTEM to "System", ThemeMode.LIGHT to "Light", ThemeMode.DARK to "Dark")
-                    modes.forEachIndexed { i, (m, name) ->
-                        SegmentedButton(
-                            selected = theme == m,
-                            onClick = { vm.setThemeMode(m) },
-                            shape = SegmentedButtonDefaults.itemShape(i, modes.size),
-                            // Selection is indigo everywhere (nav, chips); the default here was saffron.
-                            colors = SegmentedButtonDefaults.colors(
-                                activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            ),
-                        ) { Text(name) }
-                    }
-                }
+                val modes = listOf(ThemeMode.SYSTEM to "System", ThemeMode.LIGHT to "Light", ThemeMode.DARK to "Dark")
+                SegmentedControl(
+                    modes.map { it.second },
+                    selected = modes.indexOfFirst { it.first == theme }.coerceAtLeast(0),
+                    onSelect = { vm.setThemeMode(modes[it].first) },
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                )
             }
         }
 
         item {
-            Group("Privacy") {
+            Group("Privacy", androidx.compose.ui.graphics.Color(0xFF30B0C7)) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.Top) {
-                    Box(
-                        Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Filled.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp)) }
-                    Spacer(Modifier.width(16.dp))
+                    IconTile(Icons.Filled.Lock, androidx.compose.ui.graphics.Color(0xFF30B0C7))
+                    Spacer(Modifier.width(12.dp))
                     Text(
                         "Your data is saved on this phone and in your private cloud account (Supabase). Only you can see it. The text of your SMS and notifications never leaves this phone.",
                         style = MaterialTheme.typography.bodyMedium,
@@ -418,7 +427,7 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
         }
 
         item {
-            Group("Danger zone", titleColor = AppColors.current.danger) {
+            Group("Danger zone", AppColors.current.dangerFill) {
                 SettingRow(
                     Icons.Filled.DeleteForever, "Delete all data", danger = true,
                     value = "Removes all entries and learned categories, here and in your account.",
@@ -523,27 +532,22 @@ private fun toggleSms(vm: AppViewModel, s: SettingsEntity, allowed: Boolean, ask
 }
 
 @Composable
-private fun Group(title: String, titleColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary, content: @Composable ColumnScope.() -> Unit) {
-    Column {
-        Text(
-            title,
-            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
-            style = MaterialTheme.typography.labelLarge,
-            color = titleColor,
-        )
-        SectionCard(contentPadding = PaddingValues(vertical = 4.dp), content = content)
+private fun Group(title: String, tint: androidx.compose.ui.graphics.Color, content: @Composable ColumnScope.() -> Unit) {
+    // Apple Settings: grey upper-case header, white section, one icon colour per group.
+    androidx.compose.runtime.CompositionLocalProvider(LocalSettingTint provides tint) {
+        GroupedSection(header = title, content = content)
     }
 }
 
 @Composable
 private fun Divider() {
-    HorizontalDivider(Modifier.padding(start = 72.dp), color = MaterialTheme.colorScheme.outlineVariant)
+    Hairline(start = SettingTextStart)
 }
 
 /** Permission status under a switch row: a chip, plus an action button when permission is missing. */
 @Composable
 private fun PermLine(ok: Boolean, actionLabel: String, onAction: () -> Unit) {
-    Row(Modifier.padding(start = 72.dp, end = 16.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(Modifier.padding(start = SettingTextStart, end = 16.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         StatusChip(ok)
         if (!ok) TextButton(onClick = onAction) { Text(actionLabel) }
     }
@@ -571,13 +575,16 @@ private fun FullScreenPage(title: String, subtitle: String?, onClose: () -> Unit
             controller.isAppearanceLightStatusBars = !dark
             controller.isAppearanceLightNavigationBars = !dark
         }
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Surface(Modifier.fillMaxSize(), color = AppColors.current.grouped) {
             Column(Modifier.safeDrawingPadding().imePadding()) {
-                Row(Modifier.padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    RoundGlassButton(onClick = onClose, contentDescription = "Back", state = null) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                    }
+                    Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(title, style = MaterialTheme.typography.titleLarge)
-                        if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(title, style = MaterialTheme.typography.headlineSmall)
+                        if (subtitle != null) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = AppColors.current.secondaryLabel)
                     }
                 }
                 content()
@@ -650,7 +657,7 @@ private fun AppsPage(
                         )
                     }
                     Spacer(Modifier.width(12.dp))
-                    Switch(checked = smart, onCheckedChange = null)
+                    Switch(colors = appleSwitchColors(), checked = smart, onCheckedChange = null)
                 }
                 Text(
                     "If you turn off notifications for an app, its payments still come from your bank SMS.",
@@ -767,7 +774,7 @@ private fun ImportSheet(vm: AppViewModel, smsAllowed: Boolean, onAllowSms: () ->
     var rangeName by rememberSaveable { mutableStateOf(ImportRange.M3.name) }
     val range = ImportRange.entries.first { it.name == rangeName }
     val state = vm.importState.collectAsStateWithLifecycle().value
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = com.local.salarytracker.ui.components.sheetBackground(), shape = SheetShape) {
         Column(
             Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp),

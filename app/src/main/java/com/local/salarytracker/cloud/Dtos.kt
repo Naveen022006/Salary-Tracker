@@ -138,7 +138,8 @@ fun TxnEntity.toPush(userId: String) = TxnPush(
     type = type.name,
     occurredAt = Instant.ofEpochMilli(timestamp).toString(),
     merchant = merchant.cut(Limits.MERCHANT),
-    category = category.name.take(Limits.CATEGORY),
+    // An own category travels as "C:<name>" (older app versions read it as Other).
+    category = (customCategory?.let { com.local.salarytracker.data.CustomCategories.toCloud(it) } ?: category.name).take(Limits.CATEGORY),
     source = source.name,
     sender = sender.cut(Limits.SENDER),
     accountLast4 = accountLast4.cut(Limits.LAST4),
@@ -172,6 +173,7 @@ fun TxnPull.toEntity(existing: TxnEntity?): TxnEntity? = try {
         updatedAt = parseInstant(updatedAt).toEpochMilli(),
         deleted = false,
         dirty = false,
+        customCategory = com.local.salarytracker.data.CustomCategories.fromCloud(category),
     )
 } catch (_: Exception) {
     null

@@ -1,5 +1,13 @@
 package com.local.salarytracker.ui
 
+import com.local.salarytracker.ui.components.ScrollToTopEffect
+import com.local.salarytracker.ui.components.Hairline
+import com.local.salarytracker.ui.components.GlassSurface
+import com.local.salarytracker.ui.components.GlassMaterial
+import com.local.salarytracker.ui.components.GlassCardShape
+import com.local.salarytracker.ui.components.GroupedSection
+import com.local.salarytracker.ui.components.CapsuleButton
+import com.local.salarytracker.ui.components.AppleChip
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -91,7 +99,8 @@ private fun LendingHome(vm: AppViewModel, listState: LazyListState) {
     BackHandler(enabled = open) { vm.closeLendingSearch() }
     ScreenScaffold(
         title = "Lending",
-        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
+        hasNavigation = open,
+        listState = listState,
         titleContent = if (open) {
             { SearchField(query, "Search by name") { vm.lendingQuery.value = it } }
         } else null,
@@ -138,9 +147,9 @@ private fun LendingList(vm: AppViewModel, pad: PaddingValues, listState: LazyLis
         okFilter && (query.isEmpty() || b.person.name.contains(query, ignoreCase = true))
     }
     LazyColumn(
-        state = listState,
+        state = listState.also { ScrollToTopEffect(it) },
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(top = pad.calculateTopPadding() + 8.dp, bottom = pad.calculateBottomPadding() + 96.dp),
+        contentPadding = PaddingValues(top = pad.calculateTopPadding() + 8.dp, bottom = pad.calculateBottomPadding()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (hint != null) {
@@ -156,11 +165,7 @@ private fun LendingList(vm: AppViewModel, pad: PaddingValues, listState: LazyLis
                         title = "Track money you lend and borrow",
                         text = "Add a person, then record what you gave or got back. This does not change your daily budget.",
                         action = {
-                            Button(onClick = { vm.openPersonSheet(null) }, modifier = Modifier.defaultMinSize(minHeight = 48.dp)) {
-                                Icon(Icons.Filled.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Add person")
-                            }
+                            CapsuleButton("Add person", onClick = { vm.openPersonSheet(null) }, icon = Icons.Filled.PersonAdd)
                         },
                     )
                 }
@@ -176,23 +181,12 @@ private fun LendingList(vm: AppViewModel, pad: PaddingValues, listState: LazyLis
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 for (f in LendingFilter.entries) {
-                    FilterChip(
-                        selected = filter == f,
-                        onClick = { vm.lendingFilter.value = f },
-                        label = { Text(f.label) },
-                        colors = appChipColors(),
-                        modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                    )
+                    AppleChip(f.label, selected = filter == f, onClick = { vm.lendingFilter.value = f })
                 }
             }
         }
         item(key = "people") {
-            SectionCard(Modifier.padding(horizontal = 16.dp), contentPadding = PaddingValues(0.dp)) {
-                SectionHeader(
-                    "People",
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
-                    subtitle = "${filtered.size} ${if (filtered.size == 1) "person" else "people"}",
-                )
+            GroupedSection(Modifier.padding(horizontal = 16.dp), header = "People · ${filtered.size}") {
                 if (filtered.isEmpty()) {
                     EmptyState(
                         icon = Icons.Filled.SearchOff,
@@ -206,62 +200,48 @@ private fun LendingList(vm: AppViewModel, pad: PaddingValues, listState: LazyLis
                     )
                 } else {
                     filtered.forEachIndexed { i, b ->
-                        if (i > 0) HorizontalDivider(Modifier.padding(start = 72.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        if (i > 0) Hairline(start = 72.dp)
                         PersonRow(b, vm, today) { vm.selectedPerson.value = b.person.remoteId; vm.closeLendingSearch() }
                     }
-                    Spacer(Modifier.height(8.dp))
                 }
             }
         }
     }
 }
 
-/** Gradient card: "You will get" and "You need to pay". */
+/** Glass card: "You will get" (green) and "You need to pay" (red). */
 @Composable
 private fun LendingHero(totals: LendingTotals, overduePeople: Int, modifier: Modifier) {
     val colors = AppColors.current
-    val onCard = colors.onHero
-    SectionCard(
-        modifier.clip(RoundedCornerShape(20.dp)).background(Brush.linearGradient(listOf(colors.heroStart, colors.heroEnd))),
-        containerColor = Color.Transparent,
-        contentColor = onCard,
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp),
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            HeroColumn("You will get", totals.youWillGetPaise, "from ${totals.peopleOwingYou} ${if (totals.peopleOwingYou == 1) "person" else "people"}", Modifier.weight(1f))
-            HeroColumn("You need to pay", totals.youNeedToPayPaise, "to ${totals.peopleYouOwe} ${if (totals.peopleYouOwe == 1) "person" else "people"}", Modifier.weight(1f))
-        }
-        if (overduePeople > 0) {
-            Spacer(Modifier.height(12.dp))
-            val accent = colors.heroAccent
-            Row(
-                Modifier.clip(RoundedCornerShape(12.dp)).background(accent.copy(alpha = 0.22f)).padding(horizontal = 10.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Filled.Warning, contentDescription = null, tint = accent, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("$overduePeople overdue", style = MaterialTheme.typography.labelMedium, color = accent)
+    GlassSurface(GlassMaterial.Regular, GlassCardShape, modifier.fillMaxWidth()) {
+        Column(Modifier.padding(20.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                HeroColumn("You will get", totals.youWillGetPaise, colors.positive, "from ${totals.peopleOwingYou} ${if (totals.peopleOwingYou == 1) "person" else "people"}", Modifier.weight(1f))
+                HeroColumn("You need to pay", totals.youNeedToPayPaise, colors.danger, "to ${totals.peopleYouOwe} ${if (totals.peopleYouOwe == 1) "person" else "people"}", Modifier.weight(1f))
+            }
+            if (overduePeople > 0) {
+                Spacer(Modifier.height(12.dp))
+                TintPill("$overduePeople overdue", colors.dangerFill, strong = true)
             }
         }
     }
 }
 
 @Composable
-private fun HeroColumn(label: String, paise: Long, caption: String, modifier: Modifier) {
-    val onCard = AppColors.current.onHero
+private fun HeroColumn(label: String, paise: Long, color: Color, caption: String, modifier: Modifier) {
     val text = Money.formatWhole(paise)
     val size = when {
-        text.length <= 7 -> 24.sp
-        text.length == 8 -> 21.sp
-        text.length == 9 -> 19.sp
-        else -> 17.sp
+        text.length <= 7 -> 28.sp
+        text.length == 8 -> 24.sp
+        text.length == 9 -> 21.sp
+        else -> 18.sp
     }
+    val secondary = AppColors.current.secondaryLabel
     Column(modifier) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = onCard.copy(alpha = 0.75f))
-        Spacer(Modifier.height(4.dp))
-        Text(text, style = MoneyStyle.Card.copy(fontSize = size, lineHeight = size * 1.3f), color = onCard, maxLines = 1, overflow = TextOverflow.Clip)
+        Text(label, style = MaterialTheme.typography.titleSmall, color = secondary)
         Spacer(Modifier.height(2.dp))
-        Text(caption, style = MaterialTheme.typography.bodySmall, color = onCard.copy(alpha = 0.75f))
+        Text(text, style = MoneyStyle.Card.copy(fontSize = size, lineHeight = size * 1.25f), color = if (paise > 0) color else AppColors.current.label, maxLines = 1, overflow = TextOverflow.Clip)
+        Text(caption, style = MaterialTheme.typography.bodySmall, color = secondary)
     }
 }
 
@@ -289,13 +269,13 @@ private fun PersonRow(b: PersonBalance, vm: AppViewModel, today: LocalDate, onCl
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             when {
-                b.balancePaise > 0 -> TintPill("Owes you ${Money.format(b.balancePaise)}", colors.positive)
-                b.balancePaise < 0 -> TintPill("You owe ${Money.format(-b.balancePaise)}", colors.danger)
+                b.balancePaise > 0 -> TintPill("Owes you ${Money.format(b.balancePaise)}", colors.positiveFill)
+                b.balancePaise < 0 -> TintPill("You owe ${Money.format(-b.balancePaise)}", colors.dangerFill)
                 else -> TintPill("Settled", MaterialTheme.colorScheme.onSurfaceVariant)
             }
             when {
-                b.overdueCount > 0 -> TintPill("Overdue", colors.danger, strong = true)
-                b.dueTodayCount > 0 -> TintPill("Due today", colors.accent, strong = true)
+                b.overdueCount > 0 -> TintPill("Overdue", colors.dangerFill, strong = true)
+                b.dueTodayCount > 0 -> TintPill("Due today", colors.warningFill, strong = true)
                 else -> {}
             }
         }

@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Category
@@ -53,24 +54,64 @@ val Category.icon: ImageVector
 /** Name to show for a category in the UI ("Not spending" for the transfer category). */
 val Category.label: String get() = if (this == Category.TRANSFER) "Not spending" else displayName
 
+/** Apple system colour of a category in the current theme (dark theme uses the brighter dark variants). */
+@Composable
+fun Category.tint(): Color = if (AppColors.current.isDark) Color(DarkCategoryColors.getValue(this)) else Color(color)
+
+private val DarkCategoryColors: Map<Category, Long> = mapOf(
+    Category.FOOD to 0xFFFF453A, Category.GROCERIES to 0xFF30D158, Category.TRAVEL to 0xFF64D2FF,
+    Category.BILLS to 0xFFFFD60A, Category.RENT_EMI to 0xFF5E5CE6, Category.SHOPPING to 0xFFFF375F,
+    Category.HEALTH to 0xFF63E6E2, Category.ENTERTAINMENT to 0xFFBF5AF2, Category.EDUCATION to 0xFF0A84FF,
+    Category.PEOPLE to 0xFFFF9F0A, Category.CASH to 0xFF40C8E0, Category.TRANSFER to 0xFF98989D,
+    Category.OTHER to 0xFFAC8E68,
+)
+
 /**
- * Category icon on a circle of the category colour at 16% (light) / 22% (dark) alpha. Use 40.dp in lists, 48.dp in pickers.
- * [credit] shows the "money received" icon in teal instead.
+ * Category icon as an Apple-style tile: white glyph on a rounded square of the category colour.
+ * Use 40.dp in lists, 48.dp in pickers. [credit] shows the "money received" icon on green instead.
  */
 @Composable
-fun CategoryIcon(category: Category, size: Dp = 40.dp, modifier: Modifier = Modifier, credit: Boolean = false) {
-    val dark = AppColors.current.isDark
-    // Dark theme: lift the category colour 15% toward white so it keeps 3:1 on its 22% circle.
-    val tint = if (credit) AppColors.current.credit else Color(category.color).let { if (dark) lerp(it, Color.White, 0.15f) else it }
+fun CategoryIcon(category: Category, size: Dp = 40.dp, modifier: Modifier = Modifier, credit: Boolean = false, custom: String? = null) {
+    if (custom != null && !credit) {
+        val look = customLook(custom)
+        Box(
+            modifier.size(size).clip(RoundedCornerShape(size * 0.25f)).background(Color(look.color)),
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.material3.Text(
+                look.emoji,
+                fontSize = with(androidx.compose.ui.platform.LocalDensity.current) { (size * 0.5f).toSp() },
+            )
+        }
+        return
+    }
+    val fill = if (credit) AppColors.current.positiveFill else category.tint()
+    // Yellow and mint are light: a dark glyph keeps the icon readable on them in light theme.
+    val light = !AppColors.current.isDark && !credit && (category == Category.BILLS || category == Category.HEALTH)
     Box(
-        modifier.size(size).clip(CircleShape).background(tint.copy(alpha = if (dark) 0.22f else 0.16f)),
+        modifier.size(size).clip(RoundedCornerShape(size * 0.25f)).background(fill),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = if (credit) Icons.Filled.SouthWest else category.icon,
             contentDescription = null,
-            tint = tint,
-            modifier = Modifier.size(size * 0.55f),
+            tint = if (light) Color(0xFF3A3A3C) else Color.White,
+            modifier = Modifier.size(size * 0.56f),
         )
     }
 }
+
+/** The user's own categories by lower-case name (provided by MainScreen). */
+val LocalCustomCategories = androidx.compose.runtime.compositionLocalOf<Map<String, com.local.salarytracker.data.CustomCategoryEntity>> { emptyMap() }
+
+/** Look (emoji, colour) of an own category; a default look when it came from another phone. */
+@Composable
+fun customLook(name: String): com.local.salarytracker.data.CustomCategoryEntity =
+    LocalCustomCategories.current[name.lowercase()] ?: com.local.salarytracker.data.CustomCategories.fallback(name)
+
+/** Name shown for an entry's category: its own category name, else the built-in label. */
+fun categoryName(category: Category, custom: String?): String = custom ?: category.label
+
+/** Colour of an entry's category (own category colour, else the built-in tint). */
+@Composable
+fun categoryTint(category: Category, custom: String?): Color = if (custom != null) Color(customLook(custom).color) else category.tint()

@@ -141,15 +141,25 @@ class Repository(private val db: AppDatabase) {
         return entity.copy(id = id)
     }
 
-    suspend fun addManual(amountPaise: Long, category: Category, note: String?, timestamp: Long): TxnEntity {
+    suspend fun addManual(
+        amountPaise: Long,
+        category: Category,
+        note: String?,
+        timestamp: Long,
+        merchant: String? = null,
+        customCategory: String? = null,
+        excluded: Boolean = false,
+    ): TxnEntity {
         val e = TxnEntity(
             amountPaise = amountPaise,
             type = TxnType.DEBIT,
             timestamp = timestamp,
-            merchant = null,
-            category = category,
+            merchant = merchant?.takeIf { it.isNotBlank() },
+            category = if (customCategory != null) Category.OTHER else category,
             source = TxnSource.MANUAL,
             note = note?.takeIf { it.isNotBlank() },
+            excluded = excluded,
+            customCategory = customCategory,
         )
         val saved = e.copy(id = txns.insert(e))
         changed()
@@ -400,5 +410,26 @@ class Repository(private val db: AppDatabase) {
     }
 
     /** Removes everything stored on this phone (used on sign out / account switch). */
+    // ------------------------------------------------------------ own categories
+    private val customs get() = db.customCategoryDao()
+
+    /** The user's own categories: saved ones, plus names that only exist on entries (synced from another phone). */
+    fun observeCustomCategories(): kotlinx.coroutines.flow.Flow<List<CustomCategoryEntity>> =
+        kotlinx.coroutines.flow.combine(customs.observeAll(), customs.observeNamesInUse()) { saved, used ->
+            val known = saved.map { it.name.lowercase() }.toSet()
+            saved + used.filter { it.lowercase() !in known }.distinctBy { it.lowercase() }.map { CustomCategories.fallback(it) }
+        }
+
+    suspend fun saveCustomCategory(c: CustomCategoryEntity) = customs.upsert(c)
+
+    /** Removes an own category; its entries go back to Other. */
+    suspend fun deleteCustomCategory(name: String) {
+        customs.clearFromTxns(name, System.currentTimeMillis())
+        customs.delete(name)
+        changed()
+    }
+
+    suspend fun countInCustomCategory(name: String): Int = customs.countTxns(name)
+
     suspend fun wipeLocal() = withContext(Dispatchers.IO) { db.clearAllTables() }
 }

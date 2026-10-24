@@ -1,5 +1,24 @@
 package com.local.salarytracker.ui
 
+import com.local.salarytracker.ui.components.ButtonStyle
+import com.local.salarytracker.ui.components.CapsuleButton
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.background
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.foundation.layout.width
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material.icons.filled.LocationOn
+import com.local.salarytracker.ui.components.sheetBackground
+import com.local.salarytracker.ui.components.sheetCard
+import com.local.salarytracker.ui.components.sheetTopGap
+import com.local.salarytracker.ui.components.SheetShape
+import com.local.salarytracker.ui.components.FieldShape
+import com.local.salarytracker.ui.components.CapsuleShape
+import com.local.salarytracker.ui.components.appleFieldColors
+import androidx.compose.material3.AssistChipDefaults
+import com.local.salarytracker.ui.components.appleSwitchColors
 import androidx.compose.foundation.layout.size
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
@@ -109,7 +128,9 @@ fun EntryEditorSheet(vm: AppViewModel, req: EditorRequest) {
     ModalBottomSheet(
         onDismissRequest = { vm.closeEditor() },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        containerColor = sheetBackground(),
+        shape = SheetShape,
+        modifier = Modifier.sheetTopGap(),
         contentWindowInsets = { WindowInsets(0) },
     ) {
         EditorForm(vm, txn)
@@ -146,6 +167,14 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
     var category by rememberDraftOf(vm, "entry.cat", original?.category ?: Category.OTHER, { it.name }, { runCatching { Category.valueOf(it) }.getOrNull() })
     var excluded by rememberDraftBool(vm, "entry.excl", original?.excluded ?: false)
     var text by rememberDraft(vm, "entry.text", original?.merchant ?: original?.note ?: "")
+    // Own category name ("" = a built-in one) and "what it was for" (asked for Other; kept as the note).
+    var customCat by rememberDraft(vm, "entry.custom", original?.customCategory ?: "")
+    var use by rememberDraft(vm, "entry.use", if (original?.merchant != null) original.note ?: "" else "")
+    var newCategory by remember { mutableStateOf<String?>(null) } // non-null = the "New category" dialog is open
+    val customs = vm.customCategories.collectAsStateWithLifecycle().value
+    val hidden = vm.hiddenCategories.collectAsStateWithLifecycle().value
+    val isOther = !excluded && category == Category.OTHER && customCat.isEmpty()
+    val needsDetails = isOther && (text.isBlank() || use.isBlank())
     val initial = remember {
         original?.let { Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDateTime() } ?: java.time.LocalDateTime.now()
     }
@@ -174,21 +203,26 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
 
     fun save() {
         val amount = paise ?: return
+        if (needsDetails) return
         val name = text.trim().takeIf { it.isNotEmpty() }
         val cat = if (excluded) Category.TRANSFER else category
+        val own = customCat.takeIf { it.isNotEmpty() && !excluded }
+        val useText = use.trim().takeIf { it.isNotEmpty() }
         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         if (original == null) {
-            vm.addEntry(amount, cat, name, timestamp(), excluded)
+            vm.addEntry(amount, cat, name, timestamp(), excluded, use = useText, customCategory = own)
             vm.closeEditor()
         } else {
             val updated = original.copy(
                 amountPaise = amount,
-                category = cat,
+                category = if (own != null) Category.OTHER else cat,
+                customCategory = own,
                 excluded = excluded,
                 merchant = name,
+                note = useText ?: original.note.takeIf { original.merchant == null || !isOther },
                 timestamp = timestamp(),
             )
-            val categoryChanged = cat != original.category && !excluded && original.type == TxnType.DEBIT
+            val categoryChanged = cat != original.category && own == null && !excluded && original.type == TxnType.DEBIT
             if (categoryChanged && name != null) {
                 askRule = updated
             } else {
@@ -238,38 +272,95 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
                 }
             }
 
-            // Category grid: 4 columns
+            // Category grid: 4 columns. Built-in ones (minus the ones hidden in Settings), the user's own ones, "New".
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Category", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                val ordered = Category.entries.filter { it != Category.TRANSFER } + Category.TRANSFER
-                ordered.chunked(4).forEach { rowItems ->
+                val builtIn = Category.entries.filter { it != Category.TRANSFER && (it.name !in hidden || (original?.category == it && original.customCategory == null)) }
+                val tiles = buildList {
+                    builtIn.forEach { c ->
+                        add(TileSpec(c.label, !excluded && category == c && customCat.isEmpty(), @Composable { CategoryIcon(c, 48.dp) }) {
+                            category = c; customCat = ""; excluded = false
+                        })
+                    }
+                    customs.forEach { own ->
+                        add(TileSpec(own.name, !excluded && customCat.equals(own.name, true), @Composable { CategoryIcon(Category.OTHER, 48.dp, custom = own.name) }) {
+                            category = Category.OTHER; customCat = own.name; excluded = false
+                        })
+                    }
+                    add(TileSpec(Category.TRANSFER.label, excluded, @Composable { CategoryIcon(Category.TRANSFER, 48.dp) }) {
+                        category = Category.TRANSFER; customCat = ""; excluded = true
+                    })
+                    add(
+                        TileSpec("New category", false, @Composable {
+                            Box(
+                                Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(AppColors.current.fill3),
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(Icons.Filled.Add, contentDescription = null, tint = AppColors.current.accent, modifier = Modifier.size(28.dp)) }
+                        }) { newCategory = "" },
+                    )
+                }
+                tiles.chunked(4).forEach { rowItems ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        rowItems.forEach { c ->
-                            CategoryTile(
-                                c,
-                                selected = category == c,
-                                onClick = {
-                                    category = c
-                                    excluded = c == Category.TRANSFER
-                                },
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
+                        rowItems.forEach { t -> CategoryTile(t.icon, t.label, t.selected, t.onClick, Modifier.weight(1f)) }
                         repeat(4 - rowItems.size) { Spacer(Modifier.weight(1f)) }
                     }
                 }
             }
 
-            // Shop or note
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it.take(80) },
-                label = { Text("Shop or note") },
-                leadingIcon = { Icon(Icons.Filled.Storefront, contentDescription = null) },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth(),
-            )
+            if (isOther) {
+                // "Other" says nothing about the money: ask what it is and what it was for.
+                Surface(shape = RoundedCornerShape(16.dp), color = sheetCard()) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Tell us about this spending", style = MaterialTheme.typography.titleSmall, color = AppColors.current.label)
+                        OutlinedTextField(
+                            value = text,
+                            onValueChange = { text = it.take(80) },
+                            label = { Text("What is it?") },
+                            placeholder = { Text("For example: Gift for Ravi") },
+                            leadingIcon = { Icon(Icons.Filled.Storefront, contentDescription = null) },
+                            singleLine = true,
+                            shape = FieldShape,
+                            colors = appleFieldColors(),
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = use,
+                            onValueChange = { use = it.take(80) },
+                            label = { Text("What was it for?") },
+                            placeholder = { Text("For example: Birthday") },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = null) },
+                            singleLine = true,
+                            shape = FieldShape,
+                            colors = appleFieldColors(),
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(onDone = { keyboard?.hide() }),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        if (use.isNotBlank()) {
+                            CapsuleButton(
+                                "Make \"${com.local.salarytracker.data.CustomCategories.cleanName(use)}\" a category",
+                                onClick = { newCategory = use },
+                                style = ButtonStyle.Tinted,
+                                small = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+            } else {
+                // Shop or note
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.take(80) },
+                    label = { Text("Shop or note") },
+                    leadingIcon = { Icon(Icons.Filled.Storefront, contentDescription = null) },
+                    singleLine = true,
+                    shape = FieldShape,
+                    colors = appleFieldColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
 
             // When
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -279,14 +370,18 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
                         onClick = { pickers.date(date) { date = it } },
                         label = { Text(Fmt.dayLabel(date, LocalDate.now())) },
                         leadingIcon = { Icon(Icons.Filled.CalendarToday, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                        shape = RoundedCornerShape(12.dp),
+                        shape = CapsuleShape,
+                        border = null,
+                        colors = AssistChipDefaults.assistChipColors(containerColor = sheetCard()),
                         modifier = Modifier.defaultMinSize(minHeight = 48.dp),
                     )
                     AssistChip(
                         onClick = { pickers.time(time.hour, time.minute) { h, m -> time = LocalTime.of(h, m) } },
                         label = { Text(Fmt.hourMinute(time.hour, time.minute)) },
                         leadingIcon = { Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                        shape = RoundedCornerShape(12.dp),
+                        shape = CapsuleShape,
+                        border = null,
+                        colors = AssistChipDefaults.assistChipColors(containerColor = sheetCard()),
                         modifier = Modifier.defaultMinSize(minHeight = 48.dp),
                     )
                 }
@@ -299,7 +394,7 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
                     role = Role.Switch,
                     onValueChange = {
                         excluded = it
-                        if (it) category = Category.TRANSFER else if (category == Category.TRANSFER) category = Category.OTHER
+                        if (it) { category = Category.TRANSFER; customCat = "" } else if (category == Category.TRANSFER) category = Category.OTHER
                     },
                 ),
                 verticalAlignment = Alignment.CenterVertically,
@@ -312,7 +407,23 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(checked = excluded, onCheckedChange = null)
+                Switch(colors = appleSwitchColors(), checked = excluded, onCheckedChange = null)
+            }
+
+            // Saved place (Spending map)
+            if (original != null) {
+                val place by vm.placeOf(original.remoteId).collectAsStateWithLifecycle(initialValue = null)
+                place?.let { p ->
+                    Surface(shape = RoundedCornerShape(16.dp), color = sheetCard()) {
+                        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.LocationOn, contentDescription = null, tint = com.local.salarytracker.ui.theme.AppColors.current.positiveFill)
+                            Spacer(Modifier.width(12.dp))
+                            Text("Saved place", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                            TextButton(onClick = { vm.closeEditor(); vm.openSpendingMap(p.lat to p.lng) }) { Text("Show on map") }
+                            TextButton(onClick = { vm.removePlace(original.remoteId) }) { Text("Remove", color = com.local.salarytracker.ui.theme.AppColors.current.danger) }
+                        }
+                    }
+                }
             }
 
             // Original message (captured entries)
@@ -329,7 +440,7 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
                         )
                     }
                     AnimatedVisibility(showOriginal) {
-                        Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+                        Surface(shape = RoundedCornerShape(12.dp), color = sheetCard()) {
                             Text(
                                 raw,
                                 modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -344,18 +455,40 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
         }
 
         // Sticky save bar
-        Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Surface(color = sheetBackground()) {
             Column(Modifier.navigationBarsPadding()) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                if (paise != null && needsDetails) {
+                    Text(
+                        "Add what it is and what it was for, then save.",
+                        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 10.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppColors.current.secondaryLabel,
+                        textAlign = TextAlign.Center,
+                    )
+                }
                 Button(
                     onClick = { save() },
-                    enabled = paise != null,
+                    enabled = paise != null && !needsDetails,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp).defaultMinSize(minHeight = 56.dp),
                 ) { Text("Save", style = MaterialTheme.typography.titleMedium) }
             }
         }
     }
 
+    newCategory?.let { start ->
+        CategoryEditDialog(
+            initialName = start,
+            onDismiss = { newCategory = null },
+            onSave = { name, emoji, color ->
+                vm.saveCustomCategory(name, emoji, color) { saved ->
+                    category = Category.OTHER
+                    customCat = saved
+                    excluded = false
+                }.also { ok -> if (ok) newCategory = null }
+            },
+        )
+    }
     askRule?.let { u ->
         AlertDialog(
             onDismissRequest = { askRule = null },
@@ -384,10 +517,12 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
     }
 }
 
+private class TileSpec(val label: String, val selected: Boolean, val icon: @Composable () -> Unit, val onClick: () -> Unit)
+
 /** One category in the 4-column picker: 48dp icon over a label (2 lines max). */
 @Composable
-private fun CategoryTile(category: Category, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(12.dp)
+private fun CategoryTile(icon: @Composable () -> Unit, label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val shape = RoundedCornerShape(16.dp)
     Box(
         modifier
             .defaultMinSize(minHeight = 48.dp)
@@ -395,17 +530,17 @@ private fun CategoryTile(category: Category, selected: Boolean, onClick: () -> U
     ) {
         Surface(
             shape = shape,
-            color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-            border = if (selected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
+            color = if (selected) AppColors.current.accent.copy(alpha = if (AppColors.current.isDark) 0.24f else 0.12f) else Color.Transparent,
+            border = if (selected) BorderStroke(1.5.dp, AppColors.current.accent) else null,
         ) {
             Column(
                 Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                CategoryIcon(category, 48.dp)
+                icon()
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    category.label,
+                    label,
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center,
                     maxLines = 2,

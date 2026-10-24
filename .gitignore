@@ -17,6 +17,8 @@ build/
 
 # Cloud keys (Supabase URL, anon key, Google web client id): never commit
 supabase.properties
+# Mapbox public token for the Spending map: never commit
+mapbox.properties
 
 # Secrets for the Ask tab AI (Anthropic API key) live only in Supabase -> Edge Functions -> Secrets.
 # If the Supabase CLI is ever used, its local env files and caches must never be committed either.

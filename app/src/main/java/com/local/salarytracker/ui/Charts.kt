@@ -1,5 +1,7 @@
 package com.local.salarytracker.ui
 
+import com.local.salarytracker.ui.components.tint
+import com.local.salarytracker.ui.theme.InterText
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -47,16 +49,17 @@ import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlin.math.floor
 
-/** Donut with a stroke of 28dp; segments have small rounded gaps between them. [center] sits in the hole. */
+/** Donut with a stroke of 20dp; segments have small rounded gaps between them. [center] sits in the hole. */
 @Composable
 fun DonutChart(totals: List<CategoryTotal>, modifier: Modifier = Modifier, center: @Composable () -> Unit = {}) {
-    val track = MaterialTheme.colorScheme.surfaceContainer
+    val track = AppColors.current.fill2
+    val partColors = totals.associate { it to com.local.salarytracker.ui.components.categoryTint(it.category, it.custom) }
     var go by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { go = true }
     val progress by animateFloatAsState(if (go) 1f else 0f, rememberAppTween(700), label = "donut")
     Box(modifier.size(200.dp), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(200.dp)) {
-            val stroke = 28.dp.toPx()
+            val stroke = 20.dp.toPx()
             val inset = stroke / 2
             val arcSize = Size(size.width - stroke, size.height - stroke)
             val radius = arcSize.width / 2
@@ -65,14 +68,14 @@ fun DonutChart(totals: List<CategoryTotal>, modifier: Modifier = Modifier, cente
             if (total <= 0) {
                 drawArc(track, 0f, 360f, false, Offset(inset, inset), arcSize, style = Stroke(stroke))
             } else if (parts.size == 1) {
-                drawArc(Color(parts[0].category.color), -90f, 360f * progress, false, Offset(inset, inset), arcSize, style = Stroke(stroke))
+                drawArc(partColors.getValue(parts[0]), -90f, 360f * progress, false, Offset(inset, inset), arcSize, style = Stroke(stroke))
             } else {
                 val capDeg = Math.toDegrees((stroke / 2 / radius).toDouble()).toFloat()
                 val gapDeg = Math.toDegrees((4.dp.toPx() / radius).toDouble()).toFloat()
                 var start = -90f
                 for (t in parts) {
                     val sweep = 360f * t.amountPaise / total
-                    val color = Color(t.category.color)
+                    val color = partColors.getValue(t)
                     val flat = sweep - 2 * capDeg - gapDeg
                     if (flat >= 1.5f) {
                         // Round caps stick out by half the stroke on each side, so shorten the arc to keep a gap.
@@ -112,16 +115,17 @@ fun DailyBarChart(
 ) {
     val tm = rememberTextMeasurer()
     val density = LocalDensity.current
-    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-    val barColor = MaterialTheme.colorScheme.primary
-    val overColor = AppColors.current.danger
-    val lineColor = AppColors.current.accent
-    val grid = MaterialTheme.colorScheme.outlineVariant
-    val highlight = MaterialTheme.colorScheme.surfaceContainer
+    val labelColor = AppColors.current.secondaryLabel
+    val barColor = AppColors.current.accent.copy(alpha = 0.45f)
+    val todayColor = AppColors.current.accent
+    val overColor = AppColors.current.dangerFill
+    val lineColor = AppColors.current.warningFill
+    val grid = AppColors.current.separator.copy(alpha = 0.5f)
+    val highlight = AppColors.current.fill3
     val tipBg = MaterialTheme.colorScheme.inverseSurface
     val tipFg = MaterialTheme.colorScheme.inverseOnSurface
-    val labelStyle = TextStyle(fontSize = 11.sp, color = labelColor)
-    val tipStyle = TextStyle(fontSize = 12.sp, color = tipFg)
+    val labelStyle = TextStyle(fontFamily = InterText, fontSize = 11.sp, color = labelColor, fontFeatureSettings = "tnum")
+    val tipStyle = TextStyle(fontFamily = InterText, fontSize = 12.sp, color = tipFg, fontFeatureSettings = "tnum")
 
     val n = period.days
     val maxSpend = daily.maxOfOrNull { it.dailySpendPaise } ?: 0L
@@ -173,16 +177,15 @@ fun DailyBarChart(
             if (i < 0 || i >= n) continue
             val x = axisW + i * slot + (slot - barW) / 2
             val bh = (h * d.dailySpendPaise / maxV).coerceAtMost(h).let { if (d.dailySpendPaise > 0) maxOf(it, 4.dp.toPx()) else it }
-            val color = if (showAllowance && d.dailySpendPaise > d.allowancePaise) overColor else barColor
-            if (bh > 0f) {
-                drawRoundRect(color, Offset(x, baseY - bh), Size(barW, bh), CornerRadius(2.dp.toPx()))
+            val color = when {
+                showAllowance && d.dailySpendPaise > d.allowancePaise -> overColor
+                d.date == today -> todayColor
+                else -> barColor
             }
-            if (d.date == today) {
-                val oh = maxOf(bh, 4.dp.toPx())
-                drawRoundRect(
-                    lineColor, Offset(x - 1.dp.toPx(), baseY - oh - 1.dp.toPx()), Size(barW + 2.dp.toPx(), oh + 2.dp.toPx()),
-                    CornerRadius(3.dp.toPx()), style = Stroke(1.5.dp.toPx()),
-                )
+            if (bh > 0f) {
+                drawRoundRect(color, Offset(x, baseY - bh), Size(barW, bh), CornerRadius(minOf(barW / 2, 4.dp.toPx())))
+            } else if (d.date == today) {
+                drawRoundRect(todayColor, Offset(x, baseY - 3.dp.toPx()), Size(barW, 3.dp.toPx()), CornerRadius(1.5.dp.toPx()))
             }
             if (!showAllowance) continue
             val cx = axisW + i * slot + slot / 2
@@ -224,7 +227,7 @@ fun DailyBarChart(
             val barTop = baseY - (h * d.dailySpendPaise / maxV).coerceAtMost(h)
             val x = (cx - w / 2).coerceIn(0f, size.width - w)
             val y = (barTop - hh - 6.dp.toPx()).coerceAtLeast(0f)
-            drawRoundRect(tipBg, Offset(x, y), Size(w, hh), CornerRadius(8.dp.toPx()))
+            drawRoundRect(tipBg, Offset(x, y), Size(w, hh), CornerRadius(12.dp.toPx()))
             drawText(lay, topLeft = Offset(x + pad, y + pad / 2))
         }
     }

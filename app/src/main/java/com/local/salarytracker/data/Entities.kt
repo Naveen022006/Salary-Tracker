@@ -50,6 +50,8 @@ data class TxnEntity(
     @ColumnInfo(defaultValue = "0") val deleted: Boolean = false,
     /** True while the row has changes that are not uploaded yet. */
     @ColumnInfo(defaultValue = "1") val dirty: Boolean = true,
+    /** Name of the user's own category (see CustomCategoryEntity); then [category] is OTHER. */
+    @ColumnInfo(defaultValue = "NULL") val customCategory: String? = null,
 )
 
 @Entity(tableName = "category_rule")

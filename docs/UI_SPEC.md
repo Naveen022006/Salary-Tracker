@@ -1,5 +1,9 @@
 # Salary Tracker — UI/UX spec (v1.1)
 
+> **v1.5:** colours, type and components are now Apple "Liquid Glass": see `docs/DESIGN_GLASS.md`. Settings moved
+> from the bottom bar to a round button in every header; the bottom bar is a floating glass bar with 5 tabs and a "+".
+
+
 Goal: a calm, professional personal-finance app. Simple English (the user is not a native speaker), big
 clear numbers, one main action per screen, nothing hidden below the fold that the user must find.
 Core tracking works offline (cloud sync runs when online); no network fonts or images (bundle nothing that needs a download).

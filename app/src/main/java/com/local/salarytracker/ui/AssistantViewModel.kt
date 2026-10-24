@@ -24,7 +24,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /** One chat bubble. [reply] is set for bot messages. */
-data class ChatMessage(val id: Long, val fromUser: Boolean, val text: String, val reply: Reply?, val source: String)
+data class ChatMessage(val id: Long, val fromUser: Boolean, val text: String, val reply: Reply?, val source: String, val createdAt: Long = 0L)
 
 /** Request for the limit dialog: [category] null = let the user pick it. */
 data class LimitRequest(val category: Category?, val currentPaise: Long?)
@@ -35,7 +35,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
     private val ctx get() = getApplication<Application>()
 
     val messages: StateFlow<List<ChatMessage>?> = store.messages.map { list ->
-        list.map { ChatMessage(it.id, it.fromUser, it.text, if (it.fromUser) null else AssistantStore.decode(it.payload), it.source) }
+        list.map { ChatMessage(it.id, it.fromUser, it.text, if (it.fromUser) null else AssistantStore.decode(it.payload), it.source, it.createdAt) }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val limits: StateFlow<Map<Category, Long>> = store.limits.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
@@ -105,7 +105,14 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
                         r.leftToday?.let { setLeft(it) }
                     }
                     is AiResult.Failed -> {
-                        store.addBot(Reply(r.message, chips = AssistantEngine.DEFAULT_CHIPS.take(4)), AssistantStore.SOURCE_ERROR)
+                        store.addBot(
+                            Reply(
+                                r.message,
+                                items = listOf(ReplyItem.Action("Try again", com.local.salarytracker.assistant.ActionKind.ASK_AI, question)),
+                                chips = AssistantEngine.DEFAULT_CHIPS.take(4),
+                            ),
+                            AssistantStore.SOURCE_ERROR,
+                        )
                         r.leftToday?.let { setLeft(it) }
                     }
                 }

@@ -1,5 +1,18 @@
 package com.local.salarytracker.ui
 
+import com.local.salarytracker.ui.components.AppWallpaper
+import com.local.salarytracker.ui.components.RoundGlassButton
+import com.local.salarytracker.ui.components.LocalWallpaperHaze
+import com.local.salarytracker.ui.components.CapsuleButton
+import com.local.salarytracker.ui.components.ButtonStyle
+import com.local.salarytracker.ui.components.CapsuleShape
+import com.local.salarytracker.ui.components.IconTile
+import com.local.salarytracker.ui.components.AppleChip
+import com.local.salarytracker.ui.components.GlassSurface
+import com.local.salarytracker.ui.components.GlassMaterial
+import com.local.salarytracker.ui.components.GlassCardShape
+import com.local.salarytracker.ui.components.glassBlur
+import com.local.salarytracker.ui.theme.AppColors
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -108,12 +121,17 @@ fun OnboardingScreen(vm: AppViewModel, initial: SettingsEntity) {
     fun saveMoney() = vm.updateSettings { it.copy(salaryPaise = salary, payDay = payDay, savingsGoalPaise = goal) }
     fun saveReminder() = vm.updateSettings { it.copy(reminderHour = hour, reminderMinute = minute) }
 
+    Box(Modifier.fillMaxSize()) {
+    AppWallpaper(Modifier.fillMaxSize())
     Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
         // Top: back arrow + segmented progress bar
         Centered {
             Row(Modifier.padding(horizontal = 8.dp).height(56.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (step in 1 until LAST_STEP) {
-                    IconButton(onClick = { step-- }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+                    RoundGlassButton(onClick = { step-- }, contentDescription = "Back", state = LocalWallpaperHaze.current) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                    }
+                    Spacer(Modifier.width(8.dp))
                 } else {
                     Spacer(Modifier.size(48.dp))
                 }
@@ -142,7 +160,7 @@ fun OnboardingScreen(vm: AppViewModel, initial: SettingsEntity) {
                                     modifier = Modifier.fillMaxWidth(),
                                     textAlign = TextAlign.Center,
                                     style = MoneyStyle.Card,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = AppColors.current.accent,
                                 )
                             }
                         }
@@ -169,14 +187,14 @@ fun OnboardingScreen(vm: AppViewModel, initial: SettingsEntity) {
                                 "To remind you each evening to add cash spending.",
                                 perm.post, "Allow", actions.askPost,
                             ) {
-                                OutlinedButton(
+                                CapsuleButton(
+                                    "Reminder time: " + Fmt.hourMinute(hour, minute),
                                     onClick = { pickers.time(hour, minute) { h, m -> hour = h; minute = m } },
-                                    modifier = Modifier.padding(top = 12.dp).fillMaxWidth().heightIn(min = 48.dp),
-                                ) {
-                                    Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Reminder time: " + Fmt.hourMinute(hour, minute))
-                                }
+                                    modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
+                                    style = ButtonStyle.Tinted,
+                                    icon = Icons.Filled.Schedule,
+                                    small = true,
+                                )
                             }
                         }
                         5 -> {
@@ -189,8 +207,8 @@ fun OnboardingScreen(vm: AppViewModel, initial: SettingsEntity) {
             }
         }
 
-        // Bottom: sticky primary button (+ Skip)
-        Surface(color = MaterialTheme.colorScheme.background) {
+        // Bottom: sticky primary button (+ Skip) on frosted glass
+        Box(Modifier.fillMaxWidth().glassBlur(GlassMaterial.Thin, androidx.compose.ui.graphics.RectangleShape, rim = false)) {
             Centered {
                 Column(Modifier.padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     val importDone = importState is ImportState.Done
@@ -199,9 +217,15 @@ fun OnboardingScreen(vm: AppViewModel, initial: SettingsEntity) {
                         5 -> if (importDone) true else perm.sms && !running
                         else -> true
                     }
-                    Button(
+                    CapsuleButton(
+                        text = when (step) {
+                            0 -> "Get started"
+                            5 -> if (importDone) "Next" else if (running) "Reading SMS..." else "Import"
+                            LAST_STEP -> "Open my budget"
+                            else -> "Next"
+                        },
                         enabled = enabled,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         onClick = {
                             when (step) {
                                 3 -> { saveMoney(); next() }
@@ -217,26 +241,17 @@ fun OnboardingScreen(vm: AppViewModel, initial: SettingsEntity) {
                                 else -> next()
                             }
                         },
-                    ) {
-                        Text(
-                            when (step) {
-                                0 -> "Get started"
-                                5 -> if (importDone) "Next" else if (running) "Reading SMS..." else "Import"
-                                LAST_STEP -> "Open my budget"
-                                else -> "Next"
-                            },
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                    }
+                    )
                     if ((step == 4 || step == 5) && !(step == 5 && (importDone || running))) {
                         TextButton(
                             onClick = { if (step == 4) saveReminder(); next() },
                             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                        ) { Text("Skip") }
+                        ) { Text("Skip", style = MaterialTheme.typography.labelLarge, color = AppColors.current.accent) }
                     }
                 }
             }
         }
+    }
     }
 }
 
@@ -256,9 +271,9 @@ private fun ProgressBar(step: Int, modifier: Modifier = Modifier) {
         for (i in 0 until STEPS) {
             val on by animateFloatAsState(if (i <= step) 1f else 0f, rememberAppTween(300), label = "seg")
             Box(
-                Modifier.weight(1f).height(4.dp).clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                Modifier.weight(1f).height(4.dp).clip(CapsuleShape).background(AppColors.current.fill2),
             ) {
-                Box(Modifier.fillMaxWidth(on).height(4.dp).background(MaterialTheme.colorScheme.primary))
+                Box(Modifier.fillMaxWidth(on).height(4.dp).clip(CapsuleShape).background(AppColors.current.accent))
             }
         }
     }
@@ -267,7 +282,7 @@ private fun ProgressBar(step: Int, modifier: Modifier = Modifier) {
 @Composable
 private fun StepTitle(title: String, helper: String? = null) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineSmall.copy(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Bold))
+        Text(title, style = MaterialTheme.typography.headlineLarge, color = AppColors.current.label)
         if (helper != null) Text(helper, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -276,20 +291,14 @@ private fun StepTitle(title: String, helper: String? = null) {
 private fun WelcomeStep(firstName: String) {
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Spacer(Modifier.height(8.dp))
-        val hero = com.local.salarytracker.ui.theme.AppColors.current
-        Box(
-            Modifier.size(96.dp).clip(CircleShape).background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(hero.heroStart, hero.heroEnd))),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("₹", fontSize = 52.sp, fontWeight = FontWeight.Bold, color = hero.heroAccent)
-        }
+        AppMark(96.dp)
         if (firstName.isNotEmpty()) {
-            Text("Hi $firstName", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+            Text("Hi $firstName", style = MaterialTheme.typography.titleLarge, color = AppColors.current.accent)
         }
         Text(
             "Know what you can spend today",
             textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.headlineSmall.copy(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.headlineLarge,
         )
         Spacer(Modifier.height(4.dp))
     }
@@ -301,9 +310,7 @@ private fun WelcomeStep(firstName: String) {
 @Composable
 private fun Benefit(icon: ImageVector, title: String, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-        }
+        IconTile(icon, AppColors.current.accent, size = 44.dp)
         Spacer(Modifier.width(16.dp))
         Column {
             Text(title, style = MaterialTheme.typography.titleMedium)
@@ -319,11 +326,7 @@ private fun SavingsStep(salary: Long, goalText: String, onGoal: (String) -> Unit
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         for ((label, pct) in listOf("None" to 0, "10%" to 10, "20%" to 20, "30%" to 30)) {
             val amount = salary * pct / 100
-            FilterChip(
-                selected = goal == amount,
-                onClick = { onGoal(Money.toInput(amount)) },
-                label = { Text(label, style = MaterialTheme.typography.bodyLarge) },
-            )
+            AppleChip(label, selected = goal == amount, onClick = { onGoal(Money.toInput(amount)) })
         }
     }
     OutlinedTextField(
@@ -337,7 +340,7 @@ private fun SavingsStep(salary: Long, goalText: String, onGoal: (String) -> Unit
     )
     val spendable = (salary - goal).coerceAtLeast(0)
     val days = BudgetEngine.currentPeriod(LocalDate.now(), payDay).days
-    SectionCard(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
+    SectionCard {
         Text(
             "You can spend ${Money.formatWhole(spendable)} a month · about ${Money.formatWhole(spendable / days)} a day",
             style = MaterialTheme.typography.titleMedium,
@@ -352,16 +355,16 @@ private fun DoneStep(salary: Long, goal: Long, payDay: Int) {
     val daily = BudgetEngine.compute(period, today, salary, goal, emptyList(), today).todayAllowancePaise
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Spacer(Modifier.height(8.dp))
-        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(72.dp))
+        Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = AppColors.current.positiveFill, modifier = Modifier.size(72.dp))
         Text(
             "You are all set",
             textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.headlineSmall.copy(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.headlineLarge,
         )
     }
-    SectionCard(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Your daily budget", style = MaterialTheme.typography.labelMedium)
+    GlassSurface(GlassMaterial.Regular, GlassCardShape, Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Your daily budget", style = MaterialTheme.typography.titleSmall, color = AppColors.current.secondaryLabel)
             MoneyText(daily, style = MoneyStyle.Hero, textAlign = TextAlign.Center)
             Text(Fmt.period(period), style = MaterialTheme.typography.bodyMedium)
         }

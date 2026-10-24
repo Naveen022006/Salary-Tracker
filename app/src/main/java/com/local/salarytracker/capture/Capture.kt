@@ -77,6 +77,8 @@ object Capture {
             val left = BudgetService.snapshotNow(ctx, repo, repo.getSettings()).leftTodayPaise
             Notifier.showCapture(ctx, e, left)
         }
+        // Where it was paid (only when "Save where I spend" is on, and only for a payment that happened just now).
+        com.local.salarytracker.location.PlaceRecorder.recordFor(ctx, e)
         try {
             com.local.salarytracker.work.AssistantNotifier.afterCapture(ctx, e) // limit / unusual-spending alerts (Ask tab)
         } catch (t: Throwable) {

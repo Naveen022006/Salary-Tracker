@@ -81,10 +81,12 @@ class MainActivity : ComponentActivity() {
             i.removeExtra(Extras.OPEN_ADD_CASH)
         }
         if (i.getBooleanExtra(Extras.OPEN_REPORT, false)) {
+            vm.settingsOpen.value = false
             vm.tab.value = 3
             i.removeExtra(Extras.OPEN_REPORT)
         }
         if (i.getBooleanExtra(Extras.OPEN_ASK, false)) {
+            vm.settingsOpen.value = false
             vm.tab.value = 4
             i.removeExtra(Extras.OPEN_ASK)
         }

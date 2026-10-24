@@ -1,5 +1,16 @@
 package com.local.salarytracker.ui
 
+import com.local.salarytracker.ui.components.ScrollToTopEffect
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.layout.layout
+import com.local.salarytracker.ui.components.tint
+import com.local.salarytracker.ui.components.textTint
+import com.local.salarytracker.ui.components.GlassSurface
+import com.local.salarytracker.ui.components.GlassMaterial
+import com.local.salarytracker.ui.components.GlassCardShape
+import com.local.salarytracker.ui.components.CapsuleShape
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -68,29 +79,57 @@ fun ReportScreen(vm: AppViewModel, padding: PaddingValues) {
     val state = vm.reportState.collectAsStateWithLifecycle().value ?: return
     val today = vm.today.collectAsStateWithLifecycle().value
     val bottom = padding.calculateBottomPadding()
-    Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
+    // The month switcher is the first row of the list, so it scrolls away under the glass bar with the title.
+    val switcher: @Composable () -> Unit = {
         PeriodSwitcher(
             label = Fmt.periodYear(state.period),
             canGoBack = state.offset < state.maxOffset,
             canGoForward = state.offset > 0,
             onBack = { vm.reportOffset.value = state.offset + 1 },
             onForward = { vm.reportOffset.value = (state.offset - 1).coerceAtLeast(0) },
+            // The list already has the 16dp side gutter.
+            modifier = Modifier.layout { m, c ->
+                val extra = 32.dp.roundToPx()
+                val p = m.measure(c.copy(minWidth = c.minWidth + extra, maxWidth = c.maxWidth + extra))
+                layout(c.maxWidth, p.height) { p.place(-extra / 2, 0) }
+            },
         )
-        Crossfade(targetState = state, animationSpec = rememberAppTween(300), label = "report") { st ->
-            ReportContent(st, today, bottom)
-        }
+    }
+    Crossfade(targetState = state, animationSpec = rememberAppTween(300), label = "report") { st ->
+        ReportContent(st, today, padding.calculateTopPadding(), bottom, switcher, onMap = { vm.openSpendingMap() })
     }
 }
 
 @Composable
-private fun ReportContent(state: ReportState, today: java.time.LocalDate, bottomPadding: androidx.compose.ui.unit.Dp) {
+private fun ReportContent(
+    state: ReportState,
+    today: java.time.LocalDate,
+    topPadding: androidx.compose.ui.unit.Dp,
+    bottomPadding: androidx.compose.ui.unit.Dp,
+    switcher: @Composable () -> Unit,
+    onMap: () -> Unit,
+) {
     val r = state.report
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    ScrollToTopEffect(listState)
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = bottomPadding + 24.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = topPadding, bottom = bottomPadding + 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        item(key = "switcher") { switcher() }
         item(key = "summary") { SummaryCard(r) }
+        item(key = "map") {
+            SectionCard(onClick = onMap, contentPadding = PaddingValues(0.dp)) {
+                com.local.salarytracker.ui.components.ListRow(
+                    "Spending map",
+                    subtitle = "See where you spent this month",
+                    leading = { com.local.salarytracker.ui.components.IconTile(Icons.Filled.Map, AppColors.current.positiveFill) },
+                    trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = AppColors.current.tertiaryLabel) },
+                )
+            }
+        }
 
         if (!state.hasData) {
             item(key = "nodata") {
@@ -164,23 +203,23 @@ private fun ReportContent(state: ReportState, today: java.time.LocalDate, bottom
                         for (ct in r.byCategory) {
                             val share = ct.amountPaise.toFloat() / total
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                CategoryIcon(ct.category, 32.dp)
+                                CategoryIcon(ct.category, 32.dp, custom = ct.custom)
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(ct.category.label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                                        Text(com.local.salarytracker.ui.components.categoryName(ct.category, ct.custom), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
                                         Spacer(Modifier.width(8.dp))
                                         MoneyText(ct.amountPaise, style = MoneyStyle.Small)
                                         Text(
                                             "${Math.round(share * 100)}%",
-                                            modifier = Modifier.width(44.dp),
+                                            modifier = Modifier.padding(start = 8.dp).widthIn(min = 48.dp),
                                             textAlign = TextAlign.End,
                                             maxLines = 1,
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
-                                    ShareBar(share, Color(ct.category.color))
+                                    ShareBar(share, com.local.salarytracker.ui.components.categoryTint(ct.category, ct.custom))
                                 }
                             }
                         }
@@ -309,24 +348,24 @@ private fun LegendDot(color: Color, label: String) {
 private fun SummaryCard(r: PeriodReport) {
     val colors = AppColors.current
     val stacked = LocalDensity.current.fontScale > 1.15f
-    SectionCard {
+    GlassSurface(GlassMaterial.Regular, GlassCardShape, Modifier.fillMaxWidth()) { Column(Modifier.padding(20.dp)) {
         if (r.beforeTracking) {
-            Kpi("Spent", r.spentPaise, MaterialTheme.colorScheme.onSurface, Modifier.fillMaxWidth())
+            Kpi("Spent", r.spentPaise, colors.label, Modifier.fillMaxWidth())
             Spacer(Modifier.height(12.dp))
             InfoBanner(
                 icon = Icons.Outlined.Info,
                 text = "Before you started the app — only spending found in SMS is shown.",
                 tone = BannerTone.Info,
             )
-            return@SectionCard
+            return@Column
         }
         val budget = r.budgetPaise
         val left = budget - r.spentPaise
         val leftColor = if (left < 0) colors.danger else colors.positive
         val leftLabel = if (r.finished) (if (left < 0) "Over" else "Saved") else (if (left < 0) "Over" else "Left")
         val items = listOf(
-            Triple("Budget", budget, MaterialTheme.colorScheme.onSurface),
-            Triple("Spent", r.spentPaise, MaterialTheme.colorScheme.onSurface),
+            Triple("Budget", budget, colors.label),
+            Triple("Spent", r.spentPaise, colors.label),
             Triple(leftLabel, Math.abs(left), leftColor),
         )
         if (stacked) {
@@ -347,16 +386,17 @@ private fun SummaryCard(r: PeriodReport) {
             val ratio = (r.spentPaise.toFloat() / budget).coerceIn(0f, 1f)
             val animated by animateFloatAsState(ratio, rememberAppTween(600), label = "spent")
             val barColor = when {
-                r.spentPaise > budget -> colors.danger
-                r.spentPaise >= budget * 0.8 -> colors.warning
-                else -> MaterialTheme.colorScheme.primary
+                r.spentPaise > budget -> colors.dangerFill
+                r.spentPaise >= budget * 0.8 -> colors.warningFill
+                else -> colors.accent
             }
             Spacer(Modifier.height(16.dp))
             LinearProgressIndicator(
                 progress = { animated },
-                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                modifier = Modifier.fillMaxWidth().height(6.dp).clip(CapsuleShape),
                 color = barColor,
-                trackColor = MaterialTheme.colorScheme.surfaceContainer,
+                trackColor = colors.fill2,
+                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 gapSize = 0.dp,
                 drawStopIndicator = {},
             )
@@ -374,8 +414,8 @@ private fun SummaryCard(r: PeriodReport) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (onBudget > 0) Pill("$onBudget ${if (onBudget == 1) "day" else "days"} on budget", colors.positive, true)
-                if (r.daysOver > 0) Pill("${r.daysOver} ${if (r.daysOver == 1) "day" else "days"} over", colors.danger, false)
+                if (onBudget > 0) Pill("$onBudget ${if (onBudget == 1) "day" else "days"} on budget", colors.positiveFill, true)
+                if (r.daysOver > 0) Pill("${r.daysOver} ${if (r.daysOver == 1) "day" else "days"} over", colors.dangerFill, false)
             }
         }
         r.trackingStart?.let { cut ->
@@ -386,27 +426,26 @@ private fun SummaryCard(r: PeriodReport) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-    }
+    } }
 }
 
 @Composable
 private fun Kpi(label: String, paise: Long, color: Color, modifier: Modifier) {
     Column(modifier) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        MoneyText(paise, style = MoneyStyle.Card.copy(fontSize = 20.sp, lineHeight = 28.sp), color = color)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = AppColors.current.secondaryLabel)
+        MoneyText(paise, style = MoneyStyle.Card.copy(fontSize = 22.sp, lineHeight = 28.sp), color = color)
     }
 }
 
 @Composable
 private fun Pill(text: String, tint: Color, withCheck: Boolean) {
-    Surface(shape = RoundedCornerShape(12.dp), color = tint.copy(alpha = 0.14f)) {
+    Surface(shape = CapsuleShape, color = tint.copy(alpha = if (AppColors.current.isDark) 0.24f else 0.15f)) {
         Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             if (withCheck) {
-                Icon(Icons.Filled.Check, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+                Icon(Icons.Filled.Check, contentDescription = null, tint = textTint(tint), modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
             }
-            val textTint = if (AppColors.current.isDark) tint else androidx.compose.ui.graphics.lerp(tint, MaterialTheme.colorScheme.onSurface, 0.4f)
-            Text(text, style = MaterialTheme.typography.labelMedium, color = textTint)
+            Text(text, style = MaterialTheme.typography.bodySmall, color = textTint(tint), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
         }
     }
 }

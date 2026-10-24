@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.local.salarytracker.ui.theme.AppColors
 
 /**
- * Rounded (20dp) tonal card with no shadow; a 1dp border in light theme only. Animates size changes.
+ * Apple grouped card: white / #1C1C1E, radius 20, no border or shadow. Animates size changes.
  * Use [contentPadding] = PaddingValues(0.dp) for lists that go edge to edge. Pass [onClick] to make the card tappable.
  */
 @Composable
@@ -33,10 +33,10 @@ fun SectionCard(
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     contentPadding: PaddingValues = PaddingValues(16.dp),
     onClick: (() -> Unit)? = null,
+    shape: androidx.compose.ui.graphics.Shape = SectionShape,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(20.dp)
-    val border = if (AppColors.current.isDark) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    val border: BorderStroke? = null
     val inner: @Composable () -> Unit = {
         Column(Modifier.fillMaxWidth().animateContentSize().padding(contentPadding), content = content)
     }

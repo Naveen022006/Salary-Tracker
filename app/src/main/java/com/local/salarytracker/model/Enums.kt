@@ -10,7 +10,8 @@ enum class ThemeMode { SYSTEM, LIGHT, DARK }
 enum class TxnSource { SMS, NOTIFICATION, MANUAL }
 
 /**
- * Spending category. [color] is a stable ARGB value (0xAARRGGBB as Long).
+ * Spending category. [color] is the Apple system colour (light theme, 0xAARRGGBB as Long); the dark-theme
+ * version comes from `Category.tint()` in ui/components/CategoryIcon.kt.
  * [isFixed] categories shrink the month pool but never count as "overspent today".
  */
 enum class Category(
@@ -19,19 +20,19 @@ enum class Category(
     val color: Long,
     val isFixed: Boolean = false,
 ) {
-    FOOD("Food", "🍔", 0xFFF97316),
-    GROCERIES("Groceries", "🛒", 0xFF22A06B),
-    TRAVEL("Travel & Fuel", "🚗", 0xFF3B82F6),
-    BILLS("Bills & Recharge", "💡", 0xFFEAB308, true),
-    RENT_EMI("Rent / EMI", "🏠", 0xFFA16207, true),
-    SHOPPING("Shopping", "🛍️", 0xFFC026D3),
-    HEALTH("Health", "💊", 0xFFF43F5E),
-    ENTERTAINMENT("Movies & fun", "🎬", 0xFFEC4899),
-    EDUCATION("Education", "🎓", 0xFF6366F1),
-    PEOPLE("People", "👤", 0xFF0EA5E9),
-    CASH("Cash / ATM", "💵", 0xFF84CC16),
-    TRANSFER("Transfer", "🔁", 0xFF94A3B8),
-    OTHER("Other", "📦", 0xFFA8A29E);
+    FOOD("Food", "🍔", 0xFFFF3B30),
+    GROCERIES("Groceries", "🛒", 0xFF34C759),
+    TRAVEL("Travel & Fuel", "🚗", 0xFF32ADE6),
+    BILLS("Bills & Recharge", "💡", 0xFFFFCC00, true),
+    RENT_EMI("Rent / EMI", "🏠", 0xFF5856D6, true),
+    SHOPPING("Shopping", "🛍️", 0xFFFF2D55),
+    HEALTH("Health", "💊", 0xFF00C7BE),
+    ENTERTAINMENT("Movies & fun", "🎬", 0xFFAF52DE),
+    EDUCATION("Education", "🎓", 0xFF007AFF),
+    PEOPLE("People", "👤", 0xFFFF9500),
+    CASH("Cash / ATM", "💵", 0xFF30B0C7),
+    TRANSFER("Transfer", "🔁", 0xFF8E8E93),
+    OTHER("Other", "📦", 0xFFA2845E);
 
     companion object {
         fun fromName(name: String?): Category = entries.firstOrNull { it.name == name } ?: OTHER

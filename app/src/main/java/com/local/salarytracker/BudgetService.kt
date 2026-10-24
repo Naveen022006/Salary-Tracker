@@ -17,6 +17,7 @@ fun TxnEntity.toSpendItem(zone: ZoneId) = SpendItem(
     excluded = excluded,
     type = type,
     merchant = merchant,
+    custom = customCategory,
 )
 
 object BudgetService {

@@ -1,5 +1,25 @@
 package com.local.salarytracker.ui
 
+import kotlinx.coroutines.launch
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import com.local.salarytracker.ui.components.sheetTopGap
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.material3.TextField
+import androidx.compose.material.icons.filled.ArrowUpward
+import com.local.salarytracker.ui.components.AppleChip
+import com.local.salarytracker.ui.components.CapsuleShape
+import com.local.salarytracker.ui.components.GlassMaterial
+import com.local.salarytracker.ui.components.LocalScreenHaze
+import com.local.salarytracker.ui.components.glassBlur
+import com.local.salarytracker.ui.components.solidTint
+import com.local.salarytracker.ui.components.appleSwitchColors
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -117,7 +137,7 @@ fun AssistantTab(appVm: AppViewModel) {
     }
     ScreenScaffold(
         title = "Ask",
-        contentWindowInsets = WindowInsets(0),
+        largeTitle = false,
         actions = {
             IconButton(onClick = { vm.settingsOpen.value = true }) { Icon(Icons.Outlined.Settings, contentDescription = "Ask settings") }
             Box {
@@ -143,6 +163,7 @@ fun AssistantTab(appVm: AppViewModel) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun AssistantChat(vm: AssistantViewModel, appVm: AppViewModel, pad: PaddingValues) {
     val messages = vm.messages.collectAsStateWithLifecycle().value
@@ -152,15 +173,45 @@ private fun AssistantChat(vm: AssistantViewModel, appVm: AppViewModel, pad: Padd
     val aiLeft = vm.aiLeft.collectAsStateWithLifecycle().value
     val fixed = vm.fixed.collectAsStateWithLifecycle().value
     val list = rememberLazyListState()
-    val count = (messages?.size ?: 0) + (if (thinking) 1 else 0)
-    LaunchedEffect(count) { if (count > 0) list.animateScrollToItem(list.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1) }
+    val scope = rememberCoroutineScope()
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    // Chat basics: open at the newest message; a new question scrolls to the end; a new answer scrolls to its start
+    // (so a long answer is read from the top); "Thinking..." stays in view.
+    var opened by remember { mutableStateOf(false) }
+    val lastId = messages?.lastOrNull()?.id
+    LaunchedEffect(messages != null) {
+        if (messages != null && !opened) {
+            opened = true
+            list.scrollToItem((list.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
+            list.scrollBy(100_000f)
+        }
+    }
+    LaunchedEffect(lastId, thinking) {
+        if (!opened || messages.isNullOrEmpty()) return@LaunchedEffect
+        val last = messages.last()
+        if (last.fromUser || thinking) {
+            list.animateScrollToItem((list.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
+            list.animateScrollBy(100_000f)
+        } else {
+            val index = list.layoutInfo.totalItemsCount - 1
+            list.animateScrollToItem(index.coerceAtLeast(0))
+        }
+    }
+    // Keep the newest message in view when the keyboard opens (the list gets shorter).
+    val imeOpen = androidx.compose.foundation.layout.WindowInsets.isImeVisible
+    LaunchedEffect(imeOpen) { if (imeOpen && opened) list.animateScrollBy(100_000f) }
+    val atBottom by remember { derivedStateOf { !list.canScrollForward } }
+    val copy = rememberCopy(appVm)
 
     val lastChips = messages?.lastOrNull { !it.fromUser }?.reply?.chips?.takeIf { it.isNotEmpty() } ?: AssistantEngine.DEFAULT_CHIPS
 
-    Column(Modifier.fillMaxSize().imePadding()) {
+    // The tab bar hides while the keyboard is open, so keep its space only when the keyboard is closed.
+    val keyboard = imeOpen
+    Column(Modifier.fillMaxSize().padding(bottom = if (keyboard) 0.dp else pad.calculateBottomPadding() - 8.dp).imePadding()) {
+        Box(Modifier.weight(1f).fillMaxWidth()) {
         LazyColumn(
             state = list,
-            modifier = Modifier.weight(1f).fillMaxWidth(),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = ScreenGutter, end = ScreenGutter, top = pad.calculateTopPadding() + 4.dp, bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
@@ -170,27 +221,65 @@ private fun AssistantChat(vm: AssistantViewModel, appVm: AppViewModel, pad: Padd
             if (messages != null && messages.isEmpty()) {
                 item("welcome") { BotBubble(AssistantEngine.welcome().text, null, null, vm, appVm, fixed, showChips = false) }
             }
-            items(messages.orEmpty(), key = { it.id }) { m ->
-                if (m.fromUser) UserBubble(m.text)
-                else BotBubble(m.text, m.reply, m.source, vm, appVm, fixed, aiLeft = if (m.source == AssistantStore.SOURCE_AI) aiLeft else -1)
+            val all = messages.orEmpty()
+            itemsIndexed(all, key = { _, m -> m.id }) { i, m ->
+                // Day / time line when the day changes or after a quiet hour (like Messages).
+                val prev = all.getOrNull(i - 1)
+                if (m.createdAt > 0 && (prev == null || needsTimeLine(prev.createdAt, m.createdAt))) {
+                    TimeLine(m.createdAt, appVm.zone)
+                    Spacer(Modifier.height(8.dp))
+                }
+                if (m.fromUser) UserBubble(m.text, onLongPress = { copy(m.text) })
+                else BotBubble(
+                    m.text, m.reply, m.source, vm, appVm, fixed,
+                    aiLeft = if (m.source == AssistantStore.SOURCE_AI) aiLeft else -1,
+                    onLongPress = { copy(m.text) },
+                )
             }
             if (thinking) item("thinking") { ThinkingBubble() }
         }
+        // Jump to the newest message when scrolled up.
+        androidx.compose.animation.AnimatedVisibility(
+            visible = !atBottom && (messages?.size ?: 0) > 2,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
+            enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.8f),
+            exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.8f),
+        ) {
+            // Solid round button (glass over text was too hard to see).
+            Surface(
+                onClick = { scope.launch { list.animateScrollToItem((list.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)); list.animateScrollBy(100_000f) } },
+                shape = androidx.compose.foundation.shape.CircleShape,
+                color = com.local.salarytracker.ui.components.sheetCard(),
+                shadowElevation = 6.dp,
+                border = androidx.compose.foundation.BorderStroke(0.5.dp, AppColors.current.separator),
+                modifier = Modifier.size(40.dp).semantics { contentDescription = "Newest message" },
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = null, tint = AppColors.current.accent)
+                }
+            }
+        }
+        }
         ChipsRow(lastChips, enabled = !thinking) { vm.send(it) }
-        InputBar(enabled = !thinking, aiOn = aiOn) { vm.send(it) }
+        InputBar(enabled = !thinking, aiOn = aiOn) {
+            haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.Confirm)
+            vm.send(it)
+        }
     }
 }
 
 // ------------------------------------------------------------------ bubbles
 
 @Composable
-private fun UserBubble(text: String) {
+private fun UserBubble(text: String, onLongPress: () -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         Surface(
-            color = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            color = AppColors.current.accent,
+            contentColor = Color.White,
             shape = RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp),
-            modifier = Modifier.widthIn(max = 300.dp),
+            modifier = Modifier.widthIn(max = 300.dp).clip(RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp))
+                .combinedClickable(onClick = {}, onLongClick = onLongPress, onLongClickLabel = "Copy")
+                .semantics { contentDescription = "You: $text" },
         ) {
             Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
         }
@@ -200,10 +289,11 @@ private fun UserBubble(text: String) {
 @Composable
 private fun BotMark() {
     Box(
-        Modifier.size(28.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer),
+        Modifier.size(28.dp).clip(CircleShape)
+            .background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(0xFF5AC8FA), Color(0xFF5856D6)))),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(16.dp))
+        Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
     }
 }
 
@@ -217,10 +307,20 @@ private fun BotBubble(
     fixed: Map<Long, Category>,
     showChips: Boolean = false,
     aiLeft: Int = -1,
+    onLongPress: () -> Unit = {},
 ) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = onLongPress, onLongClickLabel = "Copy", indication = null,
+            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         BotMark()
-        SectionCard(Modifier.weight(1f, fill = false).widthIn(max = 340.dp), contentPadding = PaddingValues(14.dp)) {
+        SectionCard(
+            Modifier.weight(1f, fill = false).widthIn(max = 340.dp),
+            containerColor = AppColors.current.card,
+            contentPadding = PaddingValues(14.dp),
+            shape = RoundedCornerShape(20.dp, 20.dp, 20.dp, 6.dp),
+        ) {
             Text(text, style = MaterialTheme.typography.bodyLarge)
             val items = reply?.items.orEmpty()
             if (items.isNotEmpty()) {
@@ -360,12 +460,7 @@ private fun ChipsRow(chips: List<String>, enabled: Boolean, onChip: (String) -> 
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         chips.forEach { c ->
-            AssistChip(
-                onClick = { onChip(c) },
-                enabled = enabled,
-                label = { Text(c, maxLines = 1) },
-                colors = AssistChipDefaults.assistChipColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-            )
+            AppleChip(c, selected = false, onClick = { if (enabled) onChip(c) })
         }
     }
 }
@@ -380,11 +475,14 @@ private fun InputBar(enabled: Boolean, aiOn: Boolean, onSend: (String) -> Unit) 
         }
     }
     Row(
-        Modifier.fillMaxWidth().padding(start = ScreenGutter, end = 8.dp, top = 4.dp, bottom = 8.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
+            // Samples the wallpaper: the bar sits inside the chat list's own blur source.
+            .glassBlur(GlassMaterial.Regular, CapsuleShape, com.local.salarytracker.ui.components.LocalWallpaperHaze.current)
+            .padding(start = 4.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        OutlinedTextField(
+        TextField(
             value = text,
             onValueChange = {
                 // Enter on the keyboard sends (the field is multi-line only so long questions wrap).
@@ -397,13 +495,32 @@ private fun InputBar(enabled: Boolean, aiOn: Boolean, onSend: (String) -> Unit) 
             },
             modifier = Modifier.weight(1f),
             placeholder = { Text(if (aiOn) "Ask anything about your money" else "Ask about your money", maxLines = 1) },
+            supportingText = if (text.length > 400) {
+                { Text("${text.length} / 500", style = MaterialTheme.typography.bodySmall) }
+            } else null,
             maxLines = 4,
-            shape = RoundedCornerShape(24.dp),
+            shape = CapsuleShape,
+            colors = androidx.compose.material3.TextFieldDefaults.colors(
+                focusedContainerColor = Color.Transparent,
+                unfocusedContainerColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+                unfocusedIndicatorColor = Color.Transparent,
+            ),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { send() }),
         )
-        FilledIconButton(onClick = { send() }, enabled = enabled && text.isNotBlank(), modifier = Modifier.size(48.dp)) {
-            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+        FilledIconButton(
+            onClick = { send() },
+            enabled = enabled && text.isNotBlank(),
+            modifier = Modifier.size(44.dp),
+            colors = androidx.compose.material3.IconButtonDefaults.filledIconButtonColors(
+                containerColor = AppColors.current.accent,
+                contentColor = Color.White,
+                disabledContainerColor = AppColors.current.fill2,
+                disabledContentColor = AppColors.current.tertiaryLabel,
+            ),
+        ) {
+            Icon(Icons.Filled.ArrowUpward, contentDescription = "Send", modifier = Modifier.size(22.dp))
         }
     }
 }
@@ -421,7 +538,9 @@ fun AssistantSettingsSheet(vm: AssistantViewModel) {
     ModalBottomSheet(
         onDismissRequest = { vm.settingsOpen.value = false },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        containerColor = com.local.salarytracker.ui.components.sheetBackground(),
+        shape = com.local.salarytracker.ui.components.SheetShape,
+        modifier = Modifier.sheetTopGap(),
     ) {
         Column(
             Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = ScreenGutter).padding(bottom = 24.dp),
@@ -433,19 +552,19 @@ fun AssistantSettingsSheet(vm: AssistantViewModel) {
                     Icons.Filled.AutoAwesome, "AI answers",
                     value = if (aiOn) "On · Claude AI answers questions the app can't" + (if (aiLeft >= 0) " · $aiLeft left today" else "") else "Off · only answers made on your phone",
                     onClick = { vm.setAiEnabled(!aiOn) },
-                    trailing = { Switch(checked = aiOn, onCheckedChange = { vm.setAiEnabled(it) }) },
+                    trailing = { Switch(colors = appleSwitchColors(), checked = aiOn, onCheckedChange = { vm.setAiEnabled(it) }) },
                 )
                 SettingRow(
                     Icons.Outlined.NotificationsActive, "Spending alerts",
                     value = "When a limit is almost used, or a payment is much bigger than usual",
                     onClick = { vm.setAlerts(!alerts) },
-                    trailing = { Switch(checked = alerts, onCheckedChange = { vm.setAlerts(it) }) },
+                    trailing = { Switch(colors = appleSwitchColors(), checked = alerts, onCheckedChange = { vm.setAlerts(it) }) },
                 )
                 SettingRow(
                     Icons.Outlined.EventRepeat, "Weekly and monthly check-in",
                     value = "Sunday 7 PM, and 7 PM on the last day of your month",
                     onClick = { vm.setCheckIns(!checkIns) },
-                    trailing = { Switch(checked = checkIns, onCheckedChange = { vm.setCheckIns(it) }) },
+                    trailing = { Switch(colors = appleSwitchColors(), checked = checkIns, onCheckedChange = { vm.setCheckIns(it) }) },
                 )
             }
             Text("Monthly limits", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -493,7 +612,7 @@ private fun LimitDialog(vm: AssistantViewModel, req: LimitRequest) {
                 Category.entries.filter { it != Category.TRANSFER }.forEach { c ->
                     FilterChip(
                         selected = cat == c, onClick = { cat = c }, label = { Text(c.label) },
-                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = MaterialTheme.colorScheme.primaryContainer),
+                        colors = com.local.salarytracker.ui.components.appChipColors(),
                     )
                 }
             }
@@ -532,4 +651,47 @@ private fun ConsentDialog(vm: AssistantViewModel) {
         confirmButton = { TextButton(onClick = { vm.acceptConsent() }) { Text("Turn on") } },
         dismissButton = { TextButton(onClick = { vm.consentOpen.value = false }) { Text("Not now") } },
     )
+}
+
+
+/** A time line is shown before a message when the day changes or more than an hour passed. */
+private fun needsTimeLine(prev: Long, now: Long): Boolean {
+    val zone = java.time.ZoneId.systemDefault()
+    val a = java.time.Instant.ofEpochMilli(prev).atZone(zone).toLocalDate()
+    val b = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+    return a != b || now - prev > 60 * 60_000L
+}
+
+/** "Today 2:13 PM", "Yesterday 9:05 AM", "Sat, 24 Oct 6:40 PM" centred in grey (like Messages). */
+@Composable
+private fun TimeLine(at: Long, zone: java.time.ZoneId) {
+    val t = java.time.Instant.ofEpochMilli(at).atZone(zone)
+    val today = java.time.LocalDate.now(zone)
+    val day = when (t.toLocalDate()) {
+        today -> "Today"
+        today.minusDays(1) -> "Yesterday"
+        else -> t.format(java.time.format.DateTimeFormatter.ofPattern("EEE, d MMM", java.util.Locale.ENGLISH))
+    }
+    val time = t.format(java.time.format.DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.ENGLISH))
+    Text(
+        "$day $time",
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        style = MaterialTheme.typography.bodySmall,
+        color = AppColors.current.secondaryLabel,
+    )
+}
+
+/** Long press on a bubble copies its text (with a short "Copied" note). */
+@Composable
+private fun rememberCopy(appVm: AppViewModel): (String) -> Unit {
+    @Suppress("DEPRECATION")
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
+    return { text ->
+        clipboard.setText(androidx.compose.ui.text.AnnotatedString(text))
+        haptics.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+        // Android 13+ shows its own "Copied" note.
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) appVm.messages.tryEmit(UiMessage("Copied"))
+    }
 }

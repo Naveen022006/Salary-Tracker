@@ -296,3 +296,51 @@ to an AI (Claude Haiku 5.5) and only when the user turned "AI answers" on after 
   and no long digit runs / "@" / long strings; quota RPC as the user; `messages.create` model `claude-haiku-5-5`,
   `max_tokens` 1500, `output_config.effort` low, no sampling params; refusal -> polite answer. Secret `ANTHROPIC_API_KEY`.
   Type-checked with `npx deno@2.5.4 check`. Setup: `docs/SUPABASE_GOOGLE_SETUP.md` step I.
+
+---
+
+# v1.5 Liquid Glass redesign - version 1.5 (code 6)
+
+Design: `docs/DESIGN_GLASS.md`. No logic, data or text changes.
+- **Build**: Kotlin 2.2.21 -> **2.4.21** (needed by Haze 2.0.1, which is built with Kotlin 2.4; KSP 2.3.12 and Room
+  unchanged). New deps: `dev.chrisbanes.haze:haze`, `haze-blur`, `haze-glass` 2.0.1. Font `res/font/inter.ttf`
+  (Inter variable, subset with fontTools to Latin + punctuation + ₹, weight 400-700, opsz 14-32, 112 KB).
+- **Theme**: `ui/theme/Color.kt` Apple tokens; `AppColors` = accent, positive/warning/danger (+ *Fill), labels,
+  fills, separator, grouped/card/nested (the old hero-gradient fields are gone); `Type.kt` Inter type scale
+  (`InterText` / `InterDisplay`) + `MoneyStyle`. Category colours: `model/Enums.kt` (light) + `Category.tint()`.
+- **Glass**: `ui/components/Glass.kt` (`AppWallpaper`, `GlassMaterial`, `glassBlur`, `GlassSurface`, `liquidGlass`,
+  `LocalWallpaperHaze` / `LocalContentHaze` / `LocalScreenHaze`). `Apple.kt` (sections, tiles, capsule buttons,
+  chips, segmented control, switch/field colours, `RoundGlassButton`, `SheetShape`). `FloatingTabBar.kt`.
+- **Shell** (`MainScreen.kt`): wallpaper + tabs are haze sources; floating tab bar + "+" overlay (hidden with the
+  keyboard or Settings); tabs: 0 Today, 1 History, 2 Lending, 3 Report, 4 Ask. Settings is a page
+  (`AppViewModel.settingsOpen`, Back closes it; notification taps close it). Snackbar above the bar.
+- **ScreenScaffold**: large title + subtitle overlay that scrolls with the content (nested-scroll offset or the given
+  `listState`), thin-glass bar fading in, `hasNavigation` glass circle, actions in a glass capsule, settings button
+  from `LocalOpenSettings`; content padding top = bar + large title, bottom = `LocalBottomBarPadding`.
+- Screens restyled in place (`TodayScreen` ring hero, `LendingScreen` hero, `ReportScreen` KPI hero + charts,
+  `HistoryScreen` per-day sections, `AssistantScreen` bubbles + glass input, `SettingsScreen` grouped + coloured
+  tiles, sheets / pickers / onboarding / login).
+
+---
+
+# v1.6 Apple Music tab bar, plain colours, Spending map - version 1.6 (code 7)
+
+- **Tab bar**: `ui/components/FloatingTabBar.kt` (`FloatingTabBar(items, selected, onSelect, collapsed, onExpand,
+  today: TodayPill?, onPlus, ...)`, `AnimatedContent` between the full bar and the shrunk one). `MainScreen` owns
+  `barCollapsed` (a `NestedScrollConnection` on the tab content; reset on tab change / Settings) and builds the
+  `TodayPill` from `todayState`. `AppWallpaper` is now the plain grouped colour.
+- **Mapbox**: repo `https://api.mapbox.com/downloads/v2/releases/maven` (no secret token), `com.mapbox.maps:android-ndk27`
+  + `com.mapbox.extension:maps-compose-ndk27` 11.32.0. Public token from the gitignored root `mapbox.properties`
+  (`MAPBOX_ACCESS_TOKEN`, template `mapbox.properties.example`) -> `resValue string mapbox_access_token`
+  (`buildFeatures.resValues = true`). Empty token = "Map is not set up". Setup: `docs/MAPBOX_SETUP.md`.
+- **Places**: Room v5 (`MIGRATION_4_5`, additive) table `txn_place(txnRemoteId PK, lat, lng, accuracyM, savedAt)`,
+  `data/PlaceDaos.kt` (`PlaceDao.observeInRange` joins `txn`, `PlacedTxn`). Local only: not in `TxnEntity`, the sync
+  DTOs or `AiContext`; `clearAllTables` / "Delete all data" clear it.
+- **Location**: `location/PlaceRecorder.kt` (`play-services-location` 21.4.0): fused `getCurrentLocation(BALANCED)`
+  within 8 s, else a last location < 10 min old. `shouldRecord(enabled, entryTime, now)` = switch on and the entry
+  is within 15 min of now (imports / old dates never get a place). Called from `Capture.store` and
+  `AppViewModel.addEntry`. Manifest: coarse, fine and background location. `Prefs.placesEnabled` (default off).
+- **UI**: `ui/PlacesSettings.kt` (Settings → Places: switch, permission steps incl. "Allow all the time" explainer,
+  status), `ui/SpendingMapScreen.kt` (`SpendingMapPage`, overlay page from `AppViewModel.spendingMapOpen`,
+  `mapPlaces` follows Report's month, `mapFocus` from "Show on map" in the entry editor), Report "Spending map" card.
+- Tests: `MigrationSqlTest` v4 -> v5, `PlaceRecorderTest`.

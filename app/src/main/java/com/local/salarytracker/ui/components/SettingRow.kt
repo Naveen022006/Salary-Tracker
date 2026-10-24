@@ -26,9 +26,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.local.salarytracker.ui.theme.AppColors
 
+/** Tile colour for [SettingRow]s inside a settings group (Apple Settings: one colour per group). */
+val LocalSettingTint = androidx.compose.runtime.compositionLocalOf<androidx.compose.ui.graphics.Color?> { null }
+
+/** Start of the text in a [SettingRow] (16 + 29 tile + 12): use it for separators. */
+val SettingTextStart = 57.dp
+
 /**
- * Settings line: icon in a tonal circle, [title], [value] as small text under it, and a [trailing] slot
- * (a Switch, a StatusChip, ...). With [onClick] and no trailing, a chevron is shown. [danger] colours it red.
+ * Apple Settings row: white icon on a coloured rounded tile, [title], [value] as small grey text under it, and a
+ * [trailing] slot (a Switch, a StatusChip, ...). With [onClick] and no trailing, a grey chevron is shown.
+ * [danger] makes the tile and title red.
  */
 @Composable
 fun SettingRow(
@@ -40,26 +47,24 @@ fun SettingRow(
     danger: Boolean = false,
     trailing: (@Composable () -> Unit)? = null,
 ) {
-    val tint = if (danger) AppColors.current.danger else MaterialTheme.colorScheme.primary
-    val base = modifier.fillMaxWidth().defaultMinSize(minHeight = 56.dp)
+    val c = AppColors.current
+    val tile = if (danger) c.dangerFill else LocalSettingTint.current ?: c.accent
+    val base = modifier.fillMaxWidth().defaultMinSize(minHeight = if (value != null) 56.dp else 48.dp)
     val clickable = if (onClick != null) base.clickable(role = Role.Button, onClick = onClick) else base
-    Row(clickable.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(40.dp).clip(CircleShape).background(tint.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center,
-        ) { Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp)) }
-        Spacer(Modifier.width(16.dp))
+    Row(clickable.padding(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        IconTile(icon, tile)
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, color = if (danger) tint else MaterialTheme.colorScheme.onSurface)
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = if (danger) c.danger else c.label)
             if (value != null) {
-                Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(value, style = MaterialTheme.typography.bodySmall, color = c.secondaryLabel)
             }
         }
         if (trailing != null) {
             Spacer(Modifier.width(12.dp))
             trailing()
         } else if (onClick != null) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = c.tertiaryLabel)
         }
     }
 }

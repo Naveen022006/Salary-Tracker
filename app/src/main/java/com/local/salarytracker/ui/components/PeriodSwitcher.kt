@@ -37,7 +37,8 @@ fun PeriodSwitcher(
     Surface(
         modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        color = com.local.salarytracker.ui.theme.AppColors.current.fill3,
+        contentColor = com.local.salarytracker.ui.theme.AppColors.current.accent,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack, enabled = canGoBack) {
@@ -45,7 +46,7 @@ fun PeriodSwitcher(
             }
             Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                 Crossfade(targetState = label, animationSpec = rememberAppTween(250), label = "period") { text ->
-                    Text(text, textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(text, textAlign = TextAlign.Center, style = MaterialTheme.typography.titleSmall, color = com.local.salarytracker.ui.theme.AppColors.current.label)
                 }
             }
             IconButton(onClick = onForward, enabled = canGoForward) {

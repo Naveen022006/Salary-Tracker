@@ -1,5 +1,13 @@
 package com.local.salarytracker.ui
 
+import com.local.salarytracker.ui.components.sheetBackground
+import com.local.salarytracker.ui.components.sheetCard
+import com.local.salarytracker.ui.components.sheetTopGap
+import com.local.salarytracker.ui.components.SheetShape
+import com.local.salarytracker.ui.components.FieldShape
+import com.local.salarytracker.ui.components.CapsuleShape
+import com.local.salarytracker.ui.components.appleFieldColors
+import androidx.compose.material3.AssistChipDefaults
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -139,7 +147,9 @@ fun PersonSheet(vm: AppViewModel, req: PersonSheetRequest) {
     ModalBottomSheet(
         onDismissRequest = { vm.personSheet.value = null },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        containerColor = sheetBackground(),
+        shape = SheetShape,
+        modifier = Modifier.sheetTopGap(),
         contentWindowInsets = { WindowInsets(0) },
     ) { PersonForm(vm, req.person) }
 }
@@ -195,7 +205,8 @@ private fun PersonForm(vm: AppViewModel, existing: PersonEntity?) {
                 onValueChange = { name = it.take(LoanMath.NAME_MAX) },
                 label = { Text("Name") },
                 singleLine = true,
-                shape = RoundedCornerShape(12.dp),
+                shape = FieldShape,
+                colors = appleFieldColors(),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
                 supportingText = duplicate?.let { d ->
                     { Text(if (existing == null) "You already have $d. Add another?" else "You already have another person called $d.") }
@@ -207,7 +218,8 @@ private fun PersonForm(vm: AppViewModel, existing: PersonEntity?) {
                 onValueChange = { v -> phone = v.filter { it.isDigit() || it == '+' || it == ' ' || it == '-' }.take(LoanMath.PHONE_MAX + 6) },
                 label = { Text("Phone (optional)") },
                 singleLine = true,
-                shape = RoundedCornerShape(12.dp),
+                shape = FieldShape,
+                colors = appleFieldColors(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -226,7 +238,8 @@ private fun PersonForm(vm: AppViewModel, existing: PersonEntity?) {
                 value = note,
                 onValueChange = { note = it.take(LoanMath.NOTE_MAX) },
                 label = { Text("Note (optional)") },
-                shape = RoundedCornerShape(12.dp),
+                shape = FieldShape,
+                colors = appleFieldColors(),
                 minLines = 1,
                 maxLines = 3,
                 modifier = Modifier.fillMaxWidth(),
@@ -239,7 +252,7 @@ private fun PersonForm(vm: AppViewModel, existing: PersonEntity?) {
 
 @Composable
 private fun SaveBar(enabled: Boolean, onSave: () -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
+    Surface(color = sheetBackground()) {
         Column(Modifier.navigationBarsPadding()) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Button(
@@ -277,7 +290,9 @@ fun LoanEntrySheet(vm: AppViewModel, req: LoanSheetRequest) {
     ModalBottomSheet(
         onDismissRequest = { vm.loanSheet.value = null },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        containerColor = sheetBackground(),
+        shape = SheetShape,
+        modifier = Modifier.sheetTopGap(),
         contentWindowInsets = { WindowInsets(0) },
     ) { LoanForm(vm, req) }
 }
@@ -412,7 +427,9 @@ private fun LoanForm(vm: AppViewModel, req: LoanSheetRequest) {
                         onClick = { pickers.date(date) { date = it } },
                         label = { Text(Fmt.dayLabel(date, today)) },
                         leadingIcon = { Icon(Icons.Filled.CalendarToday, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                        shape = RoundedCornerShape(12.dp),
+                        shape = CapsuleShape,
+                        border = null,
+                        colors = AssistChipDefaults.assistChipColors(containerColor = sheetCard()),
                         modifier = Modifier.defaultMinSize(minHeight = 48.dp),
                     )
                     if (canDue) {
@@ -420,7 +437,9 @@ private fun LoanForm(vm: AppViewModel, req: LoanSheetRequest) {
                             onClick = { pickers.date(due ?: today) { due = it } },
                             label = { Text(due?.let { "Return by " + smartDate(it, today) } ?: "Return by (optional)") },
                             leadingIcon = { Icon(Icons.Filled.EventAvailable, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                            shape = RoundedCornerShape(12.dp),
+                            shape = CapsuleShape,
+                        border = null,
+                        colors = AssistChipDefaults.assistChipColors(containerColor = sheetCard()),
                             modifier = Modifier.defaultMinSize(minHeight = 48.dp),
                         )
                         if (due != null) {
@@ -441,7 +460,8 @@ private fun LoanForm(vm: AppViewModel, req: LoanSheetRequest) {
                 value = note,
                 onValueChange = { note = it.take(LoanMath.NOTE_MAX) },
                 label = { Text("Note (optional)") },
-                shape = RoundedCornerShape(12.dp),
+                shape = FieldShape,
+                colors = appleFieldColors(),
                 minLines = 1,
                 maxLines = 3,
                 modifier = Modifier.fillMaxWidth(),
@@ -471,9 +491,9 @@ private fun KindTile(kind: LoanKind, selected: Boolean, modifier: Modifier, onCl
     val colors = AppColors.current
     Surface(
         modifier.defaultMinSize(minHeight = 48.dp).selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
-        border = if (selected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
+        shape = RoundedCornerShape(16.dp),
+        color = if (selected) colors.accent.copy(alpha = if (colors.isDark) 0.24f else 0.12f) else sheetCard(),
+        border = if (selected) BorderStroke(1.5.dp, colors.accent) else null,
     ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(kindIcon(kind), contentDescription = null, tint = if (kindIsIncoming(kind)) colors.positive else colors.danger, modifier = Modifier.size(20.dp))
@@ -481,7 +501,7 @@ private fun KindTile(kind: LoanKind, selected: Boolean, modifier: Modifier, onCl
             Text(
                 kind.label,
                 style = MaterialTheme.typography.labelLarge,
-                color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                color = if (selected) colors.accent else colors.label,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

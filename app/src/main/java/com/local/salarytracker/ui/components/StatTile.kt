@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.local.salarytracker.ui.theme.MoneyStyle
@@ -31,7 +32,7 @@ fun StatTile(
     progressColor: Color = MaterialTheme.colorScheme.primary,
 ) {
     SectionCard(modifier) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = com.local.salarytracker.ui.theme.AppColors.current.secondaryLabel)
         Spacer(Modifier.height(4.dp))
         Text(value, style = MoneyStyle.Card, color = valueColor)
         if (progress != null) {
@@ -39,9 +40,10 @@ fun StatTile(
             Spacer(Modifier.height(8.dp))
             LinearProgressIndicator(
                 progress = { animated },
-                modifier = Modifier.fillMaxWidth().height(6.dp),
+                modifier = Modifier.fillMaxWidth().height(6.dp).clip(CapsuleShape),
                 color = progressColor,
-                trackColor = MaterialTheme.colorScheme.surfaceContainer,
+                trackColor = com.local.salarytracker.ui.theme.AppColors.current.fill2,
+                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
                 gapSize = 0.dp,
                 drawStopIndicator = {},
             )

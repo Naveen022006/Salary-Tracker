@@ -11,8 +11,9 @@ import androidx.room.TypeConverters
         TxnEntity::class, CategoryRuleEntity::class, SettingsEntity::class,
         PersonEntity::class, LoanEntryEntity::class,
         AssistantMessageEntity::class, CategoryLimitEntity::class,
+        TxnPlaceEntity::class, CustomCategoryEntity::class,
     ],
-    version = 4,
+    version = 6,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -23,6 +24,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun personDao(): PersonDao
     abstract fun loanDao(): LoanEntryDao
     abstract fun assistantDao(): AssistantDao
+    abstract fun placeDao(): PlaceDao
+    abstract fun customCategoryDao(): CustomCategoryDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null
@@ -35,7 +38,7 @@ abstract class AppDatabase : RoomDatabase() {
             instance ?: synchronized(this) {
                 appContext = context.applicationContext
                 instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "salary_tracker.db")
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4) // never a destructive fallback: the data is real
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6) // never a destructive fallback: the data is real
                     .build().also { instance = it }
             }
     }

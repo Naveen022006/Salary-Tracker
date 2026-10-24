@@ -60,12 +60,7 @@ fun EmptyState(
 
 @Composable
 private fun IconCircle(icon: ImageVector) {
-    Box(
-        Modifier.size(64.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainer),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(32.dp))
-    }
+    Icon(icon, contentDescription = null, tint = AppColors.current.secondaryLabel.copy(alpha = 0.6f), modifier = Modifier.size(56.dp))
 }
 
 /** Rounded message strip with an [icon] and [text]; [action] (for example a button) goes under the text. */
@@ -78,24 +73,19 @@ fun InfoBanner(
     action: (@Composable () -> Unit)? = null,
 ) {
     val colors = AppColors.current
-    val (container, content) = when (tone) {
-        BannerTone.Info -> MaterialTheme.colorScheme.surfaceContainerHigh to MaterialTheme.colorScheme.onSurfaceVariant
-        BannerTone.Positive -> colors.positive.copy(alpha = 0.12f) to MaterialTheme.colorScheme.onSurface
-        BannerTone.Warning -> colors.warning.copy(alpha = 0.12f) to MaterialTheme.colorScheme.onSurface
-        BannerTone.Danger -> colors.danger.copy(alpha = 0.12f) to MaterialTheme.colorScheme.onSurface
+    // Apple style: card with a soft tone tint and a coloured icon tile; text stays label colour (4.5:1).
+    val tile = when (tone) {
+        BannerTone.Info -> colors.accent
+        BannerTone.Positive -> colors.positiveFill
+        BannerTone.Warning -> colors.warningFill
+        BannerTone.Danger -> colors.dangerFill
     }
-    // Icons carry the tone colour; body text stays onSurface so it keeps 4.5:1 contrast on the tint.
-    val iconTint = when (tone) {
-        BannerTone.Positive -> colors.positive
-        BannerTone.Warning -> colors.warning
-        BannerTone.Danger -> colors.danger
-        else -> content
-    }
-    Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = container, contentColor = content) {
+    val container = androidx.compose.ui.graphics.lerp(colors.card, tile, if (colors.isDark) 0.16f else 0.08f)
+    Surface(modifier.fillMaxWidth(), shape = SectionShape, color = container, contentColor = colors.label) {
         Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(24.dp))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(text, style = MaterialTheme.typography.bodyMedium)
+            IconTile(icon, tile, size = 32.dp)
+            Column(Modifier.weight(1f).padding(top = 5.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(text, style = MaterialTheme.typography.bodyMedium, color = colors.label)
                 if (action != null) action()
             }
         }
@@ -113,12 +103,12 @@ fun StatusChip(
     val colors = AppColors.current
     val tint = if (ok) colors.positive else colors.warning
     // Light theme: darken the label a little so 12sp text keeps 4.5:1 on the tint.
-    val textTint = if (colors.isDark) tint else lerp(tint, MaterialTheme.colorScheme.onSurface, 0.4f)
-    Surface(modifier, shape = RoundedCornerShape(12.dp), color = tint.copy(alpha = 0.14f)) {
+    val textTint = textTint(tint)
+    Surface(modifier, shape = CapsuleShape, color = tint.copy(alpha = if (colors.isDark) 0.24f else 0.15f)) {
         Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(if (ok) Icons.Filled.Check else Icons.Filled.ErrorOutline, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(4.dp))
-            Text(if (ok) okLabel else neededLabel, style = MaterialTheme.typography.labelMedium, color = textTint, fontWeight = FontWeight.Medium)
+            Text(if (ok) okLabel else neededLabel, style = MaterialTheme.typography.bodySmall, color = textTint, fontWeight = FontWeight.SemiBold)
         }
     }
 }

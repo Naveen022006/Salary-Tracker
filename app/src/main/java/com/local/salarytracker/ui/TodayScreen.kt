@@ -1,5 +1,15 @@
 package com.local.salarytracker.ui
 
+import androidx.compose.material.icons.filled.Add
+import com.local.salarytracker.ui.components.ScrollToTopEffect
+import com.local.salarytracker.ui.components.GlassSurface
+import com.local.salarytracker.ui.components.GlassMaterial
+import com.local.salarytracker.ui.components.GlassCardShape
+import com.local.salarytracker.ui.components.GroupedSection
+import com.local.salarytracker.ui.components.Hairline
+import com.local.salarytracker.ui.components.IconTile
+import com.local.salarytracker.ui.components.CapsuleButton
+import com.local.salarytracker.ui.theme.InterText
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateFloatAsState
@@ -113,10 +123,10 @@ fun TodayScreen(vm: AppViewModel, padding: PaddingValues, listState: LazyListSta
     val spentList = state.todayTxns.filter { it.type == com.local.salarytracker.model.TxnType.DEBIT && !it.excluded }.sumOf { it.amountPaise }
 
     LazyColumn(
-        state = listState,
+        state = listState.also { ScrollToTopEffect(it) },
         modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(top = padding.calculateTopPadding() + 8.dp, bottom = padding.calculateBottomPadding() + 96.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(top = padding.calculateTopPadding() + 4.dp, bottom = padding.calculateBottomPadding()),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item(key = "hero") {
             HeroCard(gauge, if (gauge == Gauge.Over) 1f else (1f - ratio).coerceIn(0f, 1f), left, allowance, spentToday, Modifier.padding(horizontal = 16.dp))
@@ -131,8 +141,8 @@ fun TodayScreen(vm: AppViewModel, padding: PaddingValues, listState: LazyListSta
                         value = Money.formatWhole(if (monthLeft < 0) -monthLeft else monthLeft),
                         caption = "of ${Money.formatWhole(budget)}",
                         progress = if (budget > 0) snap.spentTotalPaise.toFloat() / budget else 1f,
-                        valueColor = if (monthLeft < 0) AppColors.current.danger else MaterialTheme.colorScheme.onSurface,
-                        progressColor = if (monthLeft < 0) AppColors.current.danger else MaterialTheme.colorScheme.primary,
+                        valueColor = if (monthLeft < 0) AppColors.current.danger else AppColors.current.label,
+                        progressColor = if (monthLeft < 0) AppColors.current.dangerFill else AppColors.current.accent,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                     )
                     StatTile(
@@ -146,34 +156,32 @@ fun TodayScreen(vm: AppViewModel, padding: PaddingValues, listState: LazyListSta
                     "Your month: ${Fmt.period(snap.period)}" +
                         (state.trackingStart?.let { " · Tracking since ${Fmt.shortDate(it)}" } ?: ""),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp),
+                    color = AppColors.current.secondaryLabel,
+                    modifier = Modifier.padding(horizontal = 16.dp),
                 )
             }
         }
         if (state.tip.isNotEmpty()) {
             item(key = "tip") {
-                Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.Top) {
-                    Box(Modifier.size(28.dp).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Outlined.Lightbulb, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(18.dp))
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Text(state.tip, style = MaterialTheme.typography.bodyMedium)
+                Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconTile(Icons.Outlined.Lightbulb, AppColors.current.warningFill, size = 28.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(state.tip, style = MaterialTheme.typography.bodyMedium, color = AppColors.current.label)
                 }
             }
         }
         item(key = "last7") {
-            SectionCard(Modifier.padding(horizontal = 16.dp)) {
-                SectionHeader("Last 7 days")
-                Spacer(Modifier.height(12.dp))
-                Last7DaysChart(state.last7, allowance)
-                if (allowance > 0) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Dashed line: today's budget ${Money.formatWhole(allowance)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            GroupedSection(Modifier.padding(horizontal = 16.dp), header = "Last 7 days") {
+                Column(Modifier.padding(16.dp)) {
+                    Last7DaysChart(state.last7, allowance)
+                    if (allowance > 0) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Dashed line: today's budget ${Money.formatWhole(allowance)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppColors.current.secondaryLabel,
+                        )
+                    }
                 }
             }
         }
@@ -190,34 +198,36 @@ fun TodayScreen(vm: AppViewModel, padding: PaddingValues, listState: LazyListSta
                         text = "Salary received: ${Money.format(c.amountPaise)}",
                         tone = BannerTone.Positive,
                         action = {
-                            Button(onClick = { vm.updateSettings { it.copy(salaryPaise = c.amountPaise) } }) { Text("Use as my salary") }
+                            CapsuleButton("Use as my salary", onClick = { vm.updateSettings { it.copy(salaryPaise = c.amountPaise) } }, small = true)
                         },
                     )
                 }
             }
         }
         item(key = "list") {
-            SectionCard(Modifier.padding(horizontal = 16.dp), contentPadding = PaddingValues(0.dp)) {
-                SectionHeader(
-                    "Today's spending",
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
-                    subtitle = if (state.todayTxns.isEmpty()) null else "${state.todayTxns.size} ${if (state.todayTxns.size == 1) "entry" else "entries"}",
-                    trailing = {
-                        if (state.todayTxns.isNotEmpty()) Text(Money.format(spentList), style = MoneyStyle.Row)
-                    },
-                )
+            val count = state.todayTxns.size
+            GroupedSection(
+                Modifier.padding(horizontal = 16.dp),
+                header = if (count == 0) "Today's spending" else "Today's spending · ${Money.format(spentList)} · $count ${if (count == 1) "entry" else "entries"}",
+            ) {
                 if (state.todayTxns.isEmpty()) {
                     EmptyState(
                         icon = Icons.AutoMirrored.Outlined.ReceiptLong,
                         title = "No spending yet today",
-                        text = "Bank SMS and payment alerts show up here by themselves.",
+                        text = "Bank SMS and payment alerts show up here by themselves. Paid in cash? Add it.",
+                        action = {
+                            com.local.salarytracker.ui.components.CapsuleButton(
+                                "Add cash", onClick = { vm.openAddCash() },
+                                icon = androidx.compose.material.icons.Icons.Filled.Add,
+                                style = com.local.salarytracker.ui.components.ButtonStyle.Tinted, small = true,
+                            )
+                        },
                     )
                 } else {
                     state.todayTxns.forEachIndexed { i, t ->
-                        if (i > 0) HorizontalDivider(Modifier.padding(start = 68.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        if (i > 0) Hairline(start = 68.dp)
                         EntryRow(t, vm.zone) { vm.openEntry(t.id) }
                     }
-                    Spacer(Modifier.height(8.dp))
                 }
             }
         }
@@ -227,67 +237,63 @@ fun TodayScreen(vm: AppViewModel, padding: PaddingValues, listState: LazyListSta
 @Composable
 private fun HeroCard(gauge: Gauge, progress: Float, left: Long, allowance: Long, spent: Long, modifier: Modifier) {
     val colors = AppColors.current
-    val onCard = colors.onHero
     val ringColor = when (gauge) {
-        Gauge.Ok -> onCard
-        Gauge.Warn -> colors.heroAccent
-        Gauge.Over -> colors.heroOver
+        Gauge.Ok -> colors.positiveFill
+        Gauge.Warn -> colors.warningFill
+        Gauge.Over -> colors.dangerFill
+    }
+    val textColor = when (gauge) {
+        Gauge.Ok -> colors.label
+        Gauge.Warn -> colors.warning
+        Gauge.Over -> colors.danger
     }
     val animated by animateFloatAsState(progress, rememberAppTween(600), label = "ring")
     val fontScale = LocalDensity.current.fontScale.coerceIn(1f, 1.3f)
-    val ringSize = (160 * fontScale).dp
+    val ringSize = (112 * fontScale).dp
     val over = left < 0
     val big = Money.formatWhole(if (over) -left else left)
     val bigSize = when {
-        big.length <= 4 -> 44.sp
-        big.length == 5 -> 38.sp
-        big.length == 6 -> 32.sp
-        big.length == 7 -> 28.sp
-        else -> 24.sp
+        big.length <= 6 -> 40.sp
+        big.length == 7 -> 34.sp
+        else -> 28.sp
     }
-    SectionCard(
-        modifier.clip(RoundedCornerShape(20.dp)).background(Brush.linearGradient(listOf(colors.heroStart, colors.heroEnd))),
-        containerColor = Color.Transparent,
-        contentColor = onCard,
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
-    ) {
-        val trackColor = onCard.copy(alpha = 0.18f)
-        val description = if (over) "${Money.formatWhole(-left)} over today" else "${Money.formatWhole(left)} left today"
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            Box(Modifier.size(ringSize).semantics(mergeDescendants = true) { contentDescription = description }, contentAlignment = Alignment.Center) {
-                Canvas(Modifier.fillMaxWidth().height(ringSize)) {
-                    val stroke = 14.dp.toPx()
-                    val inset = stroke / 2
-                    val arc = Size(size.width - stroke, size.height - stroke)
-                    drawArc(trackColor, 0f, 360f, false, Offset(inset, inset), arc, style = Stroke(stroke))
-                    if (animated > 0.001f) {
-                        drawArc(ringColor, -90f, 360f * animated, false, Offset(inset, inset), arc, style = Stroke(stroke, cap = StrokeCap.Round))
-                    }
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 24.dp)) {
-                    Text(
-                        big,
-                        style = MoneyStyle.Hero.copy(fontSize = bigSize, lineHeight = bigSize * 1.2f),
-                        color = if (gauge == Gauge.Ok) onCard else ringColor,
-                        maxLines = 1,
-                        softWrap = false,
-                    )
-                    Text(
-                        if (over) "over today" else "left today",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (gauge == Gauge.Ok) onCard.copy(alpha = 0.75f) else ringColor,
-                    )
+    val description = if (over) "${Money.formatWhole(-left)} over today" else "${Money.formatWhole(left)} left today"
+    GlassSurface(GlassMaterial.Regular, GlassCardShape, modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().padding(20.dp).semantics(mergeDescendants = true) { contentDescription = description },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Canvas(Modifier.size(ringSize)) {
+                val stroke = 14.dp.toPx()
+                val inset = stroke / 2
+                val arc = Size(size.width - stroke, size.height - stroke)
+                drawArc(colors.fill2, 0f, 360f, false, Offset(inset, inset), arc, style = Stroke(stroke))
+                if (animated > 0.001f) {
+                    drawArc(ringColor, -90f, 360f * animated, false, Offset(inset, inset), arc, style = Stroke(stroke, cap = StrokeCap.Round))
                 }
             }
+            Spacer(Modifier.width(20.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (over) "Over today" else "Left today",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.secondaryLabel,
+                )
+                Text(
+                    big,
+                    style = MoneyStyle.Hero.copy(fontSize = bigSize, lineHeight = bigSize * 1.15f),
+                    color = textColor,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Spent ${Money.formatWhole(spent)} of ${Money.formatWhole(allowance)}",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+                    color = colors.secondaryLabel,
+                )
+            }
         }
-        Spacer(Modifier.height(16.dp))
-        Text(
-            "Spent ${Money.formatWhole(spent)} of ${Money.formatWhole(allowance)}",
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.bodyLarge.copy(fontFeatureSettings = "tnum"),
-            color = onCard.copy(alpha = 0.85f),
-        )
     }
 }
 
@@ -296,20 +302,20 @@ private fun HeroCard(gauge: Gauge, progress: Float, left: Long, allowance: Long,
 private fun Last7DaysChart(bars: List<DayBar>, allowancePaise: Long) {
     if (bars.isEmpty()) return
     val measurer = rememberTextMeasurer()
-    val primary = MaterialTheme.colorScheme.primary
-    val barColor = primary.copy(alpha = 0.55f)
-    val stub = MaterialTheme.colorScheme.outlineVariant
-    val lineColor = AppColors.current.accent
-    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val primary = AppColors.current.accent
+    val barColor = primary.copy(alpha = 0.45f)
+    val stub = AppColors.current.fill2
+    val lineColor = AppColors.current.warningFill
+    val labelColor = AppColors.current.secondaryLabel
     val density = LocalDensity.current
-    val labelStyle = TextStyle(fontSize = 12.sp, color = labelColor)
-    val todayStyle = TextStyle(fontSize = 12.sp, color = AppColors.current.accent, fontWeight = FontWeight.Bold)
-    val valueStyleBase = TextStyle(fontSize = 11.sp, color = primary, fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum")
+    val labelStyle = TextStyle(fontFamily = InterText, fontSize = 12.sp, color = labelColor)
+    val todayStyle = TextStyle(fontFamily = InterText, fontSize = 12.sp, color = AppColors.current.accent, fontWeight = FontWeight.Bold)
+    val valueStyleBase = TextStyle(fontFamily = InterText, fontSize = 11.sp, color = primary, fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum")
     val valueStyle = valueStyleBase
     val today = bars.last()
     val appColors = AppColors.current
     val todayColor = when {
-        allowancePaise > 0L && today.spendPaise > allowancePaise -> appColors.danger
+        allowancePaise > 0L && today.spendPaise > allowancePaise -> appColors.dangerFill
         else -> appColors.accent
     }
     val disabledLabel = labelColor.copy(alpha = 0.4f)
@@ -325,7 +331,7 @@ private fun Last7DaysChart(bars: List<DayBar>, allowancePaise: Long) {
         val maxV = maxOf(allowancePaise * 1.3, maxBar * 1.1, 1.0)
         val slot = size.width / bars.size
         val barW = minOf(slot * 0.5f, 28.dp.toPx())
-        val radius = CornerRadius(6.dp.toPx())
+        val radius = CornerRadius(minOf(barW / 2, 6.dp.toPx()))
         bars.forEachIndexed { i, b ->
             val isToday = i == bars.lastIndex
             val cx = slot * i + slot / 2

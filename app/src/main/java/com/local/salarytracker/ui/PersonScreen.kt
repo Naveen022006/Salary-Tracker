@@ -1,5 +1,6 @@
 package com.local.salarytracker.ui
 
+import com.local.salarytracker.ui.components.Hairline
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -122,7 +123,9 @@ fun PersonScreen(vm: AppViewModel, remoteId: String) {
 
     ScreenScaffold(
         title = b?.person?.name ?: "",
-        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0),
+        largeTitle = false,
+        hasNavigation = true,
+        showSettings = false,
         navigationIcon = {
             IconButton(onClick = { vm.selectedPerson.value = null }) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -171,7 +174,7 @@ fun PersonScreen(vm: AppViewModel, remoteId: String) {
                         )
                     } else {
                         sorted.forEachIndexed { i, e ->
-                            if (i > 0) HorizontalDivider(Modifier.padding(start = 68.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                            if (i > 0) Hairline(start = 68.dp)
                             EntryLine(e, b.balancePaise, running[e.remoteId] ?: 0L, today, vm) { vm.openLoanSheet(b.person.remoteId, e.kind, e) }
                         }
                         Spacer(Modifier.height(8.dp))
@@ -267,8 +270,8 @@ private fun RoundAction(icon: ImageVector, label: String, onClick: () -> Unit) {
             onClick = onClick,
             modifier = Modifier.size(52.dp),
             colors = IconButtonDefaults.filledTonalIconButtonColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                containerColor = AppColors.current.accent.copy(alpha = if (AppColors.current.isDark) 0.24f else 0.15f),
+                contentColor = AppColors.current.accent,
             ),
         ) { Icon(icon, contentDescription = label) }
         Spacer(Modifier.height(4.dp))
@@ -293,17 +296,23 @@ private fun ActionGrid(personId: String, vm: AppViewModel, modifier: Modifier) {
 @Composable
 private fun ActionButton(kind: LoanKind, modifier: Modifier, onClick: () -> Unit) {
     val colors = AppColors.current
+    // Tinted capsule per kind: gave = blue, got back / paid back = green, borrowed = orange.
+    val tint = when (kind) {
+        LoanKind.GAVE -> colors.accent
+        LoanKind.BORROWED -> colors.warningFill
+        else -> colors.positiveFill
+    }
     Button(
         onClick = onClick,
-        modifier = modifier.defaultMinSize(minHeight = 56.dp),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+        modifier = modifier.defaultMinSize(minHeight = 50.dp),
+        shape = com.local.salarytracker.ui.components.CapsuleShape,
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
         colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            contentColor = MaterialTheme.colorScheme.onSurface,
+            containerColor = tint.copy(alpha = if (colors.isDark) 0.24f else 0.15f),
+            contentColor = com.local.salarytracker.ui.components.textTint(tint),
         ),
     ) {
-        Icon(kindIcon(kind), contentDescription = null, tint = if (kindIsIncoming(kind)) colors.positive else colors.danger, modifier = Modifier.size(20.dp))
+        Icon(kindIcon(kind), contentDescription = null, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(8.dp))
         Text(kind.label, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }

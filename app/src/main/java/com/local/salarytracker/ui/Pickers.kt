@@ -1,5 +1,12 @@
 package com.local.salarytracker.ui
 
+import com.local.salarytracker.ui.components.GlassMaterial
+import com.local.salarytracker.ui.components.solidTint
+import com.local.salarytracker.ui.components.AppleChip
+import com.local.salarytracker.ui.components.IconTile
+import com.local.salarytracker.ui.components.SectionShape
+import com.local.salarytracker.ui.components.CapsuleButton
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -86,18 +93,14 @@ fun PayDayPicker(selected: Int, onSelect: (Int) -> Unit, columns: Int = 7) {
             }
         }
         Spacer(Modifier.height(4.dp))
-        FilterChip(
-            selected = selected == 31,
-            onClick = { onSelect(31) },
-            label = { Text("Last day of month", style = MaterialTheme.typography.bodyLarge) },
-        )
+        AppleChip("Last day of month", selected = selected == 31, onClick = { onSelect(31) })
     }
 }
 
 @Composable
 private fun DayCell(day: Int, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer
-    val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    val bg = if (selected) AppColors.current.accent else AppColors.current.fill3
+    val fg = if (selected) Color.White else AppColors.current.label
     Box(
         modifier.aspectRatio(1f).clip(CircleShape).background(bg)
             .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
@@ -118,7 +121,7 @@ fun AmountField(
     onDone: () -> Unit = {},
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
-    Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+    Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = AppColors.current.fill3) {
         BasicTextField(
             value = value,
             onValueChange = { onChange(Money.cleanInput(it)) },
@@ -130,7 +133,7 @@ fun AmountField(
                 color = if (isError) AppColors.current.danger else MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
             ),
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            cursorBrush = SolidColor(AppColors.current.accent),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { keyboard?.hide(); onDone() }),
             visualTransformation = RupeeTransformation(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)),
@@ -151,18 +154,20 @@ fun AppDialog(
         Surface(
             Modifier.padding(16.dp).widthIn(max = 420.dp).fillMaxWidth(),
             shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            // Solid: a dialog is its own window, so it cannot blur what is behind it.
+            color = com.local.salarytracker.ui.components.sheetCard(),
+            shadowElevation = 16.dp,
         ) {
             Column(Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 12.dp)) {
-                Text(title, style = MaterialTheme.typography.headlineSmall)
+                Text(title, style = MaterialTheme.typography.titleLarge)
                 Column(
                     Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(top = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     content = content,
                 )
                 Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = onDismiss) { Text("Cancel") }
-                    TextButton(onClick = onConfirm) { Text(confirmLabel) }
+                    TextButton(onClick = onDismiss) { Text("Cancel", style = MaterialTheme.typography.bodyLarge, color = AppColors.current.accent) }
+                    TextButton(onClick = onConfirm) { Text(confirmLabel, style = MaterialTheme.typography.labelLarge, color = AppColors.current.accent) }
                 }
             }
         }
@@ -207,11 +212,11 @@ fun PayDayDialog(initial: Int, onDismiss: () -> Unit, onSave: (Int) -> Unit) {
 /** Small card: "Your month: 1 Oct – 31 Oct". */
 @Composable
 fun PayMonthCard(payDay: Int, modifier: Modifier = Modifier) {
-    Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+    Surface(modifier.fillMaxWidth(), shape = SectionShape, color = AppColors.current.card) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.Icon(Icons.Filled.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            IconTile(Icons.Filled.CalendarMonth, AppColors.current.dangerFill)
             Spacer(Modifier.padding(start = 12.dp))
-            Text(payPeriodText(payDay), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text(payPeriodText(payDay), style = MaterialTheme.typography.titleMedium, color = AppColors.current.label)
         }
     }
 }
@@ -239,16 +244,19 @@ fun ImportPanel(
         for (r in ImportRange.entries) {
             val sel = range == r
             Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = if (sel) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-                border = BorderStroke(if (sel) 2.dp else 1.dp, if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
+                shape = SectionShape,
+                color = if (sel) AppColors.current.accent.copy(alpha = if (AppColors.current.isDark) 0.24f else 0.10f) else com.local.salarytracker.ui.components.sheetCard(),
+                border = if (sel) BorderStroke(1.5.dp, AppColors.current.accent) else null,
             ) {
                 Row(
                     Modifier.fillMaxWidth().selectable(selected = sel, role = Role.RadioButton, enabled = state != ImportState.Running) { onRange(r) }
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    RadioButton(selected = sel, onClick = null, modifier = Modifier.padding(8.dp))
+                    RadioButton(
+                        selected = sel, onClick = null, modifier = Modifier.padding(8.dp),
+                        colors = androidx.compose.material3.RadioButtonDefaults.colors(selectedColor = AppColors.current.accent),
+                    )
                     Column(Modifier.padding(start = 4.dp)) {
                         Text(r.label, style = MaterialTheme.typography.titleMedium)
                         Text(rangeHint(r), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -261,7 +269,7 @@ fun ImportPanel(
                 icon = Icons.Filled.ErrorOutline,
                 text = "Allow SMS first, so the app can read your old messages.",
                 tone = BannerTone.Warning,
-                action = { OutlinedButton(onClick = onAllowSms) { Text("Allow SMS") } },
+                action = { CapsuleButton("Allow SMS", onClick = onAllowSms, small = true) },
             )
         }
         when (state) {

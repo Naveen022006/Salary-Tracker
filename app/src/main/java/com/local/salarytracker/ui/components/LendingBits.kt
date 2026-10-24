@@ -39,20 +39,26 @@ internal fun avatarColor(name: String): Color {
     return Color(AvatarPalette[h % AvatarPalette.size])
 }
 
+/** Avatar colours without the light ones (white letters must stay readable). */
+private val AvatarDark = listOf(
+    Category.TRAVEL, Category.GROCERIES, Category.SHOPPING, Category.PEOPLE, Category.ENTERTAINMENT,
+    Category.EDUCATION, Category.FOOD, Category.RENT_EMI,
+)
+
 /** Round avatar with the first letter of [name]; the colour comes from the name. */
 @Composable
 fun PersonAvatar(name: String, size: Dp = 44.dp, modifier: Modifier = Modifier) {
-    val dark = AppColors.current.isDark
-    val base = avatarColor(name)
-    val tint = if (dark) lerp(base, Color.White, 0.15f) else base
+    val h = name.trim().lowercase().fold(7) { acc, c -> (acc * 31 + c.code) and 0x7fffffff }
+    val base = AvatarDark[h % AvatarDark.size].tint()
     val initial = name.trim().firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "?"
+    // Apple contacts style: a soft vertical gradient of the colour with a white initial.
     Box(
-        modifier.size(size).clip(CircleShape).background(tint.copy(alpha = if (dark) 0.22f else 0.16f)),
+        modifier.size(size).clip(CircleShape).background(
+            androidx.compose.ui.graphics.Brush.verticalGradient(listOf(lerp(base, Color.White, 0.18f), lerp(base, Color.Black, 0.12f))),
+        ),
         contentAlignment = Alignment.Center,
     ) {
-        // Light theme: darken the letter a little so it keeps 4.5:1 on the tinted circle.
-        val letter = if (dark) tint else lerp(tint, MaterialTheme.colorScheme.onSurface, 0.35f)
-        Text(initial, color = letter, fontWeight = FontWeight.SemiBold, fontSize = (size.value * 0.42f).sp)
+        Text(initial, color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = (size.value * 0.42f).sp)
     }
 }
 
@@ -60,12 +66,12 @@ fun PersonAvatar(name: String, size: Dp = 44.dp, modifier: Modifier = Modifier) 
 @Composable
 fun TintPill(text: String, tint: Color, modifier: Modifier = Modifier, strong: Boolean = false) {
     val dark = AppColors.current.isDark
-    val textTint = if (dark) tint else lerp(tint, MaterialTheme.colorScheme.onSurface, 0.4f)
-    Surface(modifier, shape = RoundedCornerShape(12.dp), color = tint.copy(alpha = if (strong) 0.2f else 0.14f)) {
+    val textTint = textTint(tint)
+    Surface(modifier, shape = CapsuleShape, color = tint.copy(alpha = if (strong) (if (dark) 0.32f else 0.22f) else (if (dark) 0.24f else 0.15f))) {
         Row(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 text,
-                style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
+                style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
                 color = textTint,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
@@ -77,14 +83,15 @@ fun TintPill(text: String, tint: Color, modifier: Modifier = Modifier, strong: B
 
 /** Text colour for a tint that is used for small text (darker in light theme). */
 @Composable
-fun textTintFor(tint: Color): Color =
-    if (AppColors.current.isDark) tint else lerp(tint, MaterialTheme.colorScheme.onSurface, 0.4f)
+fun textTintFor(tint: Color): Color = textTint(tint)
 
 /** Filter / choice chips: the selected one uses primaryContainer like the rest of the app (not the saffron default). */
 @Composable
 fun appChipColors(): SelectableChipColors = FilterChipDefaults.filterChipColors(
-    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-    selectedTrailingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+    containerColor = AppColors.current.fill3,
+    labelColor = AppColors.current.label,
+    selectedContainerColor = AppColors.current.accent.copy(alpha = if (AppColors.current.isDark) 0.28f else 0.15f),
+    selectedLabelColor = AppColors.current.accent,
+    selectedLeadingIconColor = AppColors.current.accent,
+    selectedTrailingIconColor = AppColors.current.accent,
 )

@@ -52,6 +52,19 @@ object MigrationSql {
         "CREATE TABLE IF NOT EXISTS `category_limit` (`category` TEXT NOT NULL, `limitPaise` INTEGER NOT NULL, " +
             "`updatedAt` INTEGER NOT NULL, PRIMARY KEY(`category`))",
     )
+
+    /** v4 -> v5 (Spending map): where an entry was paid. New table only; stays on the phone. */
+    val V4_TO_V5: List<String> = listOf(
+        "CREATE TABLE IF NOT EXISTS `txn_place` (`txnRemoteId` TEXT NOT NULL, `lat` REAL NOT NULL, `lng` REAL NOT NULL, " +
+            "`accuracyM` REAL NOT NULL, `savedAt` INTEGER NOT NULL, PRIMARY KEY(`txnRemoteId`))",
+    )
+
+    /** v5 -> v6 (own categories): the category name on each entry + the look of each own category. */
+    val V5_TO_V6: List<String> = listOf(
+        "ALTER TABLE `txn` ADD COLUMN `customCategory` TEXT DEFAULT NULL",
+        "CREATE TABLE IF NOT EXISTS `custom_category` (`name` TEXT NOT NULL, `emoji` TEXT NOT NULL, `color` INTEGER NOT NULL, " +
+            "`createdAt` INTEGER NOT NULL, PRIMARY KEY(`name`))",
+    )
 }
 
 val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -69,5 +82,17 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
 val MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(db: SupportSQLiteDatabase) {
         MigrationSql.V3_TO_V4.forEach { db.execSQL(it) }
+    }
+}
+
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MigrationSql.V4_TO_V5.forEach { db.execSQL(it) }
+    }
+}
+
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MigrationSql.V5_TO_V6.forEach { db.execSQL(it) }
     }
 }

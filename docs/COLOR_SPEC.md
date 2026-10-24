@@ -1,5 +1,8 @@
 # Colour system v2 — "Ink & Saffron"
 
+> **Replaced in v1.5** by the Apple system colours in `docs/DESIGN_GLASS.md` (kept for history).
+
+
 Replaces the colour part of UI_SPEC.md section 1. Goal: a distinctive, premium look instead of a generic
 green Material app. Deep indigo ink brand + warm saffron accent; green is no longer the brand.
 

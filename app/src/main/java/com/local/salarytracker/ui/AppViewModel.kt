@@ -1,5 +1,6 @@
 package com.local.salarytracker.ui
 
+import kotlinx.coroutines.flow.distinctUntilChanged
 import android.Manifest
 import android.app.Application
 import android.content.pm.PackageManager
@@ -169,6 +170,26 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Selected bottom tab; lives here so it survives the composition being rebuilt (contact picker, other apps). */
     val tab = MutableStateFlow(0)
+
+    /** Settings page open (it slides over the tabs; Back closes it). */
+    val settingsOpen = MutableStateFlow(false)
+
+    // ------------------------------------------------------------ Spending map
+    /** Spending map page open (slides over everything; Back closes it). */
+    val spendingMapOpen = MutableStateFlow(false)
+
+    /** Place (lat, lng) to fly to when the map opens from an entry; null = fit all pins. */
+    val mapFocus = MutableStateFlow<Pair<Double, Double>?>(null)
+
+    fun openSpendingMap(focus: Pair<Double, Double>? = null) {
+        mapFocus.value = focus
+        spendingMapOpen.value = true
+    }
+
+    fun closeSpendingMap() {
+        spendingMapOpen.value = false
+        mapFocus.value = null
+    }
 
     /** Text of open sheets; lives here (not in composition) so it survives leaving the app and coming back. */
     val drafts = androidx.compose.runtime.mutableStateMapOf<String, String>()
@@ -364,6 +385,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             repo.deleteAllRules()
             repo.deleteAllLending()
             com.local.salarytracker.assistant.AssistantStore(getApplication()).clearAll()
+            com.local.salarytracker.data.AppDatabase.get(getApplication()).placeDao().clear()
+            customCategories.value.forEach { repo.deleteCustomCategory(it.name) }
             onDone()
         }
     }
@@ -383,21 +406,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         editor.value = null
     }
 
-    fun addEntry(amountPaise: Long, category: Category, text: String?, timestamp: Long, excluded: Boolean) {
+    /** [text] = name of the spending (shop), [use] = what it was for (kept as the note), [customCategory] = own category. */
+    fun addEntry(
+        amountPaise: Long,
+        category: Category,
+        text: String?,
+        timestamp: Long,
+        excluded: Boolean,
+        use: String? = null,
+        customCategory: String? = null,
+    ) {
         viewModelScope.launch {
-            val e = repo.addManual(amountPaise, category, text, timestamp)
-            val name = text?.trim()?.takeIf { it.isNotEmpty() }
-            if (excluded || name != null) {
-                repo.updateTxn(
-                    e.copy(
-                        merchant = name,
-                        note = null,
-                        excluded = excluded,
-                        category = if (excluded) Category.TRANSFER else category,
-                    ),
-                )
-            }
-            messages.tryEmit(UiMessage(savedText(amountPaise, if (excluded) Category.TRANSFER else category)))
+            val cat = if (excluded) Category.TRANSFER else category
+            val e = repo.addManual(
+                amountPaise, cat, use?.trim(), timestamp,
+                merchant = text?.trim(), customCategory = if (excluded) null else customCategory, excluded = excluded,
+            )
+            messages.tryEmit(UiMessage(savedText(amountPaise, cat, e.customCategory)))
+            com.local.salarytracker.location.PlaceRecorder.recordFor(getApplication(), e)
         }
     }
 
@@ -406,11 +432,54 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             repo.updateTxn(updated)
             if (rememberCategory != null) repo.setCategory(updated, rememberCategory, true)
-            messages.tryEmit(UiMessage(savedText(updated.amountPaise, if (updated.excluded) Category.TRANSFER else updated.category)))
+            messages.tryEmit(UiMessage(savedText(updated.amountPaise, if (updated.excluded) Category.TRANSFER else updated.category, updated.customCategory)))
         }
     }
 
-    private fun savedText(paise: Long, c: Category) = "Saved ${Money.format(paise)} · ${if (c == Category.TRANSFER) "Not spending" else c.displayName}"
+    private fun savedText(paise: Long, c: Category, custom: String? = null) =
+        "Saved ${Money.format(paise)} · ${custom ?: if (c == Category.TRANSFER) "Not spending" else c.displayName}"
+
+    // ------------------------------------------------------------ categories (own ones + hidden built-in ones)
+    val customCategories: StateFlow<List<com.local.salarytracker.data.CustomCategoryEntity>> =
+        repo.observeCustomCategories().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** Built-in categories the user removed from the pickers (their old entries stay as they are). */
+    val hiddenCategories = MutableStateFlow(com.local.salarytracker.Prefs.hiddenCategories(getApplication()))
+
+    fun setCategoryHidden(c: Category, hidden: Boolean) {
+        if (c == Category.OTHER || c == Category.TRANSFER) return
+        val now = if (hidden) hiddenCategories.value + c.name else hiddenCategories.value - c.name
+        com.local.salarytracker.Prefs.setHiddenCategories(getApplication(), now)
+        hiddenCategories.value = now
+    }
+
+    /** Adds (or changes the look of) an own category. Returns false when the name is empty or a built-in name. */
+    fun saveCustomCategory(rawName: String, emoji: String, color: Long, onDone: (String) -> Unit = {}): Boolean {
+        val name = com.local.salarytracker.data.CustomCategories.cleanName(rawName)
+        if (name.isEmpty() || Category.entries.any { it.displayName.equals(name, true) || it.name.equals(name, true) }) return false
+        val existing = customCategories.value.firstOrNull { it.name.equals(name, true) }
+        val keep = existing?.name ?: name
+        viewModelScope.launch {
+            repo.saveCustomCategory(
+                com.local.salarytracker.data.CustomCategoryEntity(keep, emoji, color, existing?.createdAt?.takeIf { it > 0 } ?: System.currentTimeMillis()),
+            )
+            onDone(keep)
+        }
+        return true
+    }
+
+    fun deleteCustomCategory(name: String) {
+        viewModelScope.launch {
+            val moved = repo.countInCustomCategory(name)
+            repo.deleteCustomCategory(name)
+            messages.tryEmit(UiMessage(if (moved == 0) "Removed $name" else "Removed $name. Its entries are now in Other."))
+        }
+    }
+
+    suspend fun countInCustomCategory(name: String): Int = repo.countInCustomCategory(name)
+
+    /** Categories page (Settings → Categories). */
+    val categoriesOpen = MutableStateFlow(false)
 
     /** Deletes [t] and shows "Entry deleted" with an Undo button that puts it back. */
     fun deleteEntry(t: TxnEntity) {
@@ -574,6 +643,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** True once after an existing phone's data was linked to the new account (shows a one-time note). */
+    /** Entries with a saved place in the month shown in Report (the Spending map follows Report's month). */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val mapPlaces: StateFlow<List<com.local.salarytracker.data.PlacedTxn>> =
+        reportState.map { it?.period }.distinctUntilChanged().flatMapLatest { p ->
+            if (p == null) kotlinx.coroutines.flow.flowOf(emptyList())
+            else AppDatabase.get(getApplication()).placeDao().observeInRange(p.startMillis(zone), p.endExclusiveMillis(zone))
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Saved place of one entry (entry editor). */
+    fun placeOf(remoteId: String) = AppDatabase.get(getApplication()).placeDao().observe(remoteId)
+
+    fun removePlace(remoteId: String) {
+        viewModelScope.launch { AppDatabase.get(getApplication()).placeDao().delete(remoteId) }
+    }
+
     fun consumeAdoptNote(): Boolean {
         if (!Prefs.adoptNotePending(appCtx)) return false
         Prefs.setAdoptNotePending(appCtx, false)

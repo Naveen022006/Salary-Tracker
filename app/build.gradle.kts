@@ -14,6 +14,11 @@ val cloudProps = Properties().apply {
 fun cloudField(key: String): String =
     "\"" + (cloudProps.getProperty(key) ?: "").trim().replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
+// Mapbox public token (pk...) lives in the gitignored root mapbox.properties (see mapbox.properties.example).
+val mapboxToken: String = Properties().apply {
+    rootProject.file("mapbox.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}.getProperty("MAPBOX_ACCESS_TOKEN", "").trim()
+
 
 android {
     namespace = "com.local.salarytracker"
@@ -23,11 +28,13 @@ android {
         applicationId = "com.local.salarytracker"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 7
+        versionName = "1.6"
         buildConfigField("String", "SUPABASE_URL", cloudField("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_ANON_KEY", cloudField("SUPABASE_ANON_KEY"))
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", cloudField("GOOGLE_WEB_CLIENT_ID"))
+        // The Mapbox SDK reads this string resource; empty = the Spending map says "Map is not set up".
+        resValue("string", "mapbox_access_token", mapboxToken)
     }
 
     signingConfigs {
@@ -62,6 +69,7 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        resValues = true // mapbox_access_token
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
@@ -100,6 +108,14 @@ dependencies {
     implementation(libs.supabase.auth)
     implementation(libs.supabase.postgrest)
     implementation(libs.supabase.functions)
+    // Liquid Glass: backdrop blur (bars, hero cards) and refracting glass (tab bar, round buttons)
+    implementation(libs.haze)
+    implementation(libs.haze.blur)
+    implementation(libs.haze.glass)
+    // Spending map (Mapbox) and "where I spent" (fused location)
+    implementation(libs.mapbox.maps)
+    implementation(libs.mapbox.compose)
+    implementation(libs.play.location)
     implementation(libs.ktor.client.okhttp)
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play)

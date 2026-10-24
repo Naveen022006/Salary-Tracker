@@ -53,7 +53,7 @@ WorkManager merges WAKE_LOCK, ACCESS_NETWORK_STATE, RECEIVE_BOOT_COMPLETED, FORE
 
 ## Build / signing
 - `keystore.properties` (root, ignored by git; copy from `keystore.properties.example`) points to `salarytracker.keystore` (alias `salarytracker`). `app/build.gradle.kts` reads it for the `release` signing config. Release has R8 minify + shrinkResources on (`app/proguard-rules.pro` keeps `data.**`, `model.**`, `ReminderWorker`).
-- Build: `gradlew.bat testDebugUnitTest assembleRelease`; output `app/build/outputs/apk/release/app-release.apk`, copied to `E:\TV\salary-tracker\SalaryTracker.apk`. APK is v2-signed (minSdk 26 is fine with v2).
+- Build: `gradlew.bat testDebugUnitTest assembleRelease`; output `app/build/outputs/apk/release/app-release.apk`, copied to `E:\salary-tracker\SalaryTracker.apk`. APK is v2-signed (minSdk 26 is fine with v2).
 - Permissions in the APK: READ_SMS, RECEIVE_SMS, POST_NOTIFICATIONS + WorkManager's WAKE_LOCK, ACCESS_NETWORK_STATE, RECEIVE_BOOT_COMPLETED, FOREGROUND_SERVICE. **No INTERNET.** Check: `aapt2 dump permissions SalaryTracker.apk`.
 
 ## Components (package `com.local.salarytracker`)

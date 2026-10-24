@@ -15,7 +15,7 @@ The ready-made app file is `SalaryTracker.apk` in this folder.
 2. Run:
 
    ```bash
-   adb install -r E:\TV\salary-tracker\SalaryTracker.apk
+   adb install -r E:\salary-tracker\SalaryTracker.apk
    ```
 
 3. Open **Salary Tracker** on the phone.
@@ -69,7 +69,7 @@ Tap it to add cash spending.
 Needs JDK 17 and the Android SDK (already on this PC).
 
 ```bash
-cd E:\TV\salary-tracker
+cd E:\salary-tracker
 gradlew.bat testDebugUnitTest assembleRelease
 ```
 

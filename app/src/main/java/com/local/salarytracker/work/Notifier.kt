@@ -13,6 +13,7 @@ import com.local.salarytracker.R
 import com.local.salarytracker.data.AppDatabase
 import com.local.salarytracker.data.Repository
 import com.local.salarytracker.data.TxnEntity
+import com.local.salarytracker.model.LoanKind
 import com.local.salarytracker.model.TxnType
 import com.local.salarytracker.util.Money
 import java.time.LocalDate
@@ -21,6 +22,7 @@ import java.time.ZoneId
 object Notifier {
     const val CH_REMINDER = "reminder"
     const val CH_CAPTURE = "capture"
+    const val CH_LENDING = "lending"
     private const val ID_REMINDER = 1001
 
     fun createChannels(ctx: Context) {
@@ -33,6 +35,11 @@ object Notifier {
         nm.createNotificationChannel(
             NotificationChannel(CH_CAPTURE, "New expense", NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = "Shows each expense the app finds in SMS and payment apps."
+            },
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CH_LENDING, "Lending reminders", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Tells you when money should come back to you, or when you should pay someone back."
             },
         )
     }
@@ -96,5 +103,69 @@ object Notifier {
             .setAutoCancel(true)
             .build()
         post(ctx, ID_REMINDER, n)
+    }
+
+    private const val ID_LOAN_SUMMARY = 4999
+    private const val MAX_LOAN_NOTIFICATIONS = 5
+
+    /**
+     * One notification per person with money due today or late (max 5, then a "N more" summary).
+     * Texts: "Ramesh should return ₹2,000 today", "Ramesh is 3 days late returning ₹2,000", "Pay back ₹500 to Priya today".
+     * Tapping opens that person in the Lending tab.
+     */
+    suspend fun postLoanDue(ctx: Context) {
+        val repo = Repository(AppDatabase.get(ctx))
+        val due = repo.dueEntries(LocalDate.now())
+        if (due.isEmpty()) return
+        // dueEntries is sorted most late first; grouping keeps that order.
+        val perPerson = due.groupBy { it.person.remoteId }.values.toList()
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        for ((i, group) in perPerson.withIndex()) {
+            if (i >= MAX_LOAN_NOTIFICATIONS) break
+            val first = group.first()
+            val person = first.person
+            val owedToYou = first.entry.kind == LoanKind.GAVE
+            // The amount still open: the due entries added up, but never more than the person's balance.
+            val open = kotlin.math.abs(first.balancePaise)
+            val amount = minOf(group.sumOf { it.entry.amountPaise }, open)
+            val late = group.maxOf { it.daysLate }
+            val money = Money.format(amount)
+            val days = "$late ${if (late == 1) "day" else "days"}"
+            val text = when {
+                owedToYou && late == 0 -> "${person.name} should return $money today"
+                owedToYou -> "${person.name} is $days late returning $money"
+                late == 0 -> "Pay back $money to ${person.name} today"
+                else -> "Pay back $money to ${person.name}. It is $days late."
+            }
+            val id = 5000 + (person.remoteId.hashCode() and 0x7fff)
+            val intent = Intent(ctx, MainActivity::class.java)
+                .putExtra(Extras.LOAN_PERSON_ID, person.remoteId)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            val n = NotificationCompat.Builder(ctx, CH_LENDING)
+                .setSmallIcon(R.drawable.ic_stat)
+                .setColor(0xFF4338CA.toInt())
+                .setContentTitle("Money reminder")
+                .setContentText(text)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                .setContentIntent(PendingIntent.getActivity(ctx, id, intent, flags))
+                .setAutoCancel(true)
+                .build()
+            post(ctx, id, n)
+        }
+        val more = perPerson.size - MAX_LOAN_NOTIFICATIONS
+        if (more > 0) {
+            val text = "$more more ${if (more == 1) "person has" else "people have"} money due"
+            val intent = Intent(ctx, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            val n = NotificationCompat.Builder(ctx, CH_LENDING)
+                .setSmallIcon(R.drawable.ic_stat)
+                .setColor(0xFF4338CA.toInt())
+                .setContentTitle("Money reminder")
+                .setContentText(text)
+                .setContentIntent(PendingIntent.getActivity(ctx, ID_LOAN_SUMMARY, intent, flags))
+                .setAutoCancel(true)
+                .build()
+            post(ctx, ID_LOAN_SUMMARY, n)
+        }
     }
 }

@@ -14,3 +14,6 @@ build/
 *.iml
 .idea/
 .DS_Store
+
+# Cloud keys (Supabase URL, anon key, Google web client id): never commit
+supabase.properties

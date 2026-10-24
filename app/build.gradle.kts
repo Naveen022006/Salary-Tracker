@@ -4,7 +4,16 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlin.serialization)
 }
+
+// Cloud keys live in the gitignored root supabase.properties (see supabase.properties.example); blank = cloud not set up.
+val cloudProps = Properties().apply {
+    rootProject.file("supabase.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+fun cloudField(key: String): String =
+    "\"" + (cloudProps.getProperty(key) ?: "").trim().replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 
 android {
     namespace = "com.local.salarytracker"
@@ -14,8 +23,11 @@ android {
         applicationId = "com.local.salarytracker"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
+        buildConfigField("String", "SUPABASE_URL", cloudField("SUPABASE_URL"))
+        buildConfigField("String", "SUPABASE_ANON_KEY", cloudField("SUPABASE_ANON_KEY"))
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", cloudField("GOOGLE_WEB_CLIENT_ID"))
     }
 
     signingConfigs {
@@ -32,6 +44,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Installs next to the real app (different package, own data); name comes from src/debug/res.
+            applicationIdSuffix = ".debug"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -45,6 +61,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
@@ -78,6 +95,15 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.auth)
+    implementation(libs.supabase.postgrest)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play)
+    implementation(libs.google.googleid)
 
     testImplementation(libs.junit)
+    testImplementation(libs.sqlite.jdbc)
 }

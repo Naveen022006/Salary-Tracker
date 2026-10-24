@@ -1,0 +1,11 @@
+# Copy this file to "supabase.properties" (same folder, gitignored) and fill in your own values.
+# See docs/SUPABASE_GOOGLE_SETUP.md. Leave a value empty to build without cloud sign-in.
+
+# Supabase dashboard > Project Settings > API > Project URL
+SUPABASE_URL=https://YOUR-PROJECT-REF.supabase.co
+
+# Supabase dashboard > Project Settings > API > anon / public key (safe to ship in the app; data is protected by row level security)
+SUPABASE_ANON_KEY=YOUR-ANON-PUBLIC-KEY
+
+# Google Cloud Console > APIs & Services > Credentials > OAuth client ID of type "Web application"
+GOOGLE_WEB_CLIENT_ID=YOUR-WEB-CLIENT-ID.apps.googleusercontent.com

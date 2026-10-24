@@ -9,10 +9,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Handshake
+import androidx.compose.material.icons.outlined.Handshake
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
@@ -104,13 +107,14 @@ private data class Tab(val label: String, val icon: ImageVector, val selectedIco
 
 @Composable
 private fun MainScreen(vm: AppViewModel) {
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    val tab = vm.tab.collectAsStateWithLifecycle().value
     val editor = vm.editor.collectAsStateWithLifecycle().value
     val today = vm.today.collectAsStateWithLifecycle().value
     val tabs = remember {
         listOf(
             Tab("Today", Icons.Outlined.Home, Icons.Filled.Home),
             Tab("History", Icons.Outlined.History, Icons.Filled.History),
+            Tab("Lending", Icons.Outlined.Handshake, Icons.Filled.Handshake),
             Tab("Report", Icons.Outlined.BarChart, Icons.Filled.BarChart),
             Tab("Settings", Icons.Outlined.Settings, Icons.Filled.Settings),
         )
@@ -136,6 +140,19 @@ private fun MainScreen(vm: AppViewModel) {
     }
     val todayList = rememberLazyListState()
     val fabExpanded = todayList.isScrollingUpOrAtTop()
+    val lendingList = rememberLazyListState()
+    val lendingFabExpanded = lendingList.isScrollingUpOrAtTop()
+    val selectedPerson = vm.selectedPerson.collectAsStateWithLifecycle().value
+    val personSheet = vm.personSheet.collectAsStateWithLifecycle().value
+    val loanSheet = vm.loanSheet.collectAsStateWithLifecycle().value
+    // A money reminder was tapped: show the Lending tab (the person screen is opened by the view model).
+    val lendingRequest = vm.lendingTabRequest.collectAsStateWithLifecycle().value
+    LaunchedEffect(lendingRequest) {
+        if (lendingRequest) {
+            vm.tab.value = 2
+            vm.lendingTabRequest.value = false
+        }
+    }
     val none = PaddingValues(0.dp)
 
     Scaffold(
@@ -152,9 +169,10 @@ private fun MainScreen(vm: AppViewModel) {
                 tabs.forEachIndexed { i, t ->
                     NavigationBarItem(
                         selected = tab == i,
-                        onClick = { tab = i },
+                        onClick = { vm.tab.value = i },
                         icon = { Icon(if (tab == i) t.selectedIcon else t.icon, contentDescription = null) },
-                        label = { Text(t.label) },
+                        label = { Text(t.label, maxLines = 1, softWrap = false) },
+                        alwaysShowLabel = true,
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
                             selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -175,6 +193,15 @@ private fun MainScreen(vm: AppViewModel) {
                     text = { Text("Add cash") },
                     // Saffron: pale container in light theme, the bright saffron itself in dark so it pops.
                     // Solid saffron in both themes; the pale container washed out on the light background.
+                    containerColor = if (AppColors.current.isDark) MaterialTheme.colorScheme.secondary else AppColors.current.heroAccent,
+                    contentColor = if (AppColors.current.isDark) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            } else if (tab == 2 && selectedPerson == null) {
+                ExtendedFloatingActionButton(
+                    onClick = { vm.openPersonSheet(null) },
+                    expanded = lendingFabExpanded,
+                    icon = { Icon(Icons.Filled.PersonAdd, contentDescription = null) },
+                    text = { Text("Add person") },
                     containerColor = if (AppColors.current.isDark) MaterialTheme.colorScheme.secondary else AppColors.current.heroAccent,
                     contentColor = if (AppColors.current.isDark) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSecondaryContainer,
                 )
@@ -199,10 +226,13 @@ private fun MainScreen(vm: AppViewModel) {
                     },
                 ) { pad -> TodayScreen(vm, pad, todayList) }
                 1 -> HistoryScaffold(vm) { pad -> HistoryScreen(vm, pad) }
-                2 -> ScreenScaffold("Report", contentWindowInsets = WindowInsets(0)) { pad -> ReportScreen(vm, pad) }
+                2 -> LendingTab(vm, lendingList)
+                3 -> ScreenScaffold("Report", contentWindowInsets = WindowInsets(0)) { pad -> ReportScreen(vm, pad) }
                 else -> ScreenScaffold("Settings", contentWindowInsets = WindowInsets(0)) { pad -> SettingsScreen(vm, pad) }
             }
         }
     }
     if (editor != null) EntryEditorSheet(vm, editor)
+    if (personSheet != null) PersonSheet(vm, personSheet)
+    if (loanSheet != null) LoanEntrySheet(vm, loanSheet)
 }

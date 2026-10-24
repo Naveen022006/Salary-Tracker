@@ -61,6 +61,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.NotificationAdd
+import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -114,6 +115,8 @@ import com.local.salarytracker.ui.components.CategoryIcon
 import com.local.salarytracker.ui.components.SectionCard
 import com.local.salarytracker.ui.components.SettingRow
 import com.local.salarytracker.ui.components.StatusChip
+import com.local.salarytracker.ui.components.textTintFor
+import com.local.salarytracker.work.LoanDueScheduler
 import com.local.salarytracker.ui.components.label
 import com.local.salarytracker.ui.theme.AppColors
 import com.local.salarytracker.util.Money
@@ -170,14 +173,16 @@ private fun ordinal(n: Int): String {
 }
 
 private fun appVersion(ctx: Context): String = try {
-    ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "1.2"
+    ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "1.3"
 } catch (_: Exception) {
-    "1.2"
+    "1.3"
 }
 
 @Composable
 fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
     val ctx = LocalContext.current
+    val pickers = rememberPickers()
+    pickers.Host()
     val s = vm.settings.collectAsStateWithLifecycle().value ?: return
     val appCtx = LocalContext.current
     var installedPkgs by remember { mutableStateOf<Set<String>?>(null) }
@@ -188,11 +193,13 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
     val perm = rememberPermHolder()
     val actions = rememberPermActions(perm)
     var reminderOn by remember { mutableStateOf(Prefs.reminderEnabled(ctx)) }
+    var loanReminderOn by remember { mutableStateOf(Prefs.loanRemindersEnabled(ctx)) }
+    val syncHint = SyncStatus.hint.collectAsStateWithLifecycle().value
     var dialog by rememberSaveable { mutableStateOf<String?>(null) }
     var smart by remember { mutableStateOf(Prefs.smartDetect(ctx)) }
     val accountName = vm.accountName.collectAsStateWithLifecycle().value
     val accountEmail = vm.accountEmail.collectAsStateWithLifecycle().value
-    val syncUi = SyncStatus.ui.collectAsStateWithLifecycle().value
+    val syncUi = vm.syncUi.collectAsStateWithLifecycle().value
     val lastSynced = SyncStatus.lastSynced.collectAsStateWithLifecycle().value.let { if (it > 0L) it else Prefs.lastSyncMs(ctx) }
     // Re-draw "2 min ago" every 30 seconds.
     val nowMs by produceState(System.currentTimeMillis()) {
@@ -232,6 +239,7 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
                     value = when (syncUi) {
                         SyncUi.Syncing -> "Syncing..."
                         is SyncUi.Problem -> syncUi.text
+                        is SyncUi.Waiting -> if (syncUi.count == 1) "1 change waiting for internet" else "${syncUi.count} changes waiting for internet"
                         SyncUi.Idle -> if (lastSynced <= 0L) "Not synced yet" else "Last synced " + agoText(nowMs - lastSynced)
                     },
                     onClick = { if (syncUi != SyncUi.Syncing) vm.syncNow() },
@@ -239,6 +247,14 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
                         { CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.5.dp) }
                     } else null,
                 )
+                if (syncHint != null) {
+                    Text(
+                        syncHint,
+                        modifier = Modifier.padding(start = 72.dp, end = 16.dp, bottom = 8.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = textTintFor(AppColors.current.warning),
+                    )
+                }
                 Divider()
                 SettingRow(
                     Icons.AutoMirrored.Filled.Logout, "Sign out",
@@ -274,7 +290,7 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
                 SettingRow(
                     Icons.Filled.EventAvailable, "Tracking since",
                     value = (ts?.let { Fmt.fullDate(it) } ?: "Today") + ". Earlier days are not counted.",
-                    onClick = { showDatePicker(ctx, ts ?: java.time.LocalDate.now()) { vm.setTrackingStart(it) } },
+                    onClick = { pickers.date(ts ?: java.time.LocalDate.now(), max = java.time.LocalDate.now()) { vm.setTrackingStart(it) } },
                 )
             }
         }
@@ -288,9 +304,17 @@ fun SettingsScreen(vm: AppViewModel, padding: PaddingValues) {
                 )
                 Divider()
                 SettingRow(
+                    Icons.Filled.Handshake, "Money return reminders", value = "Tells you at 10 AM when money is due back.",
+                    onClick = { loanReminderOn = !loanReminderOn; Prefs.setLoanRemindersEnabled(ctx, loanReminderOn); LoanDueScheduler.sync(ctx) },
+                    trailing = {
+                        Switch(checked = loanReminderOn, onCheckedChange = { loanReminderOn = it; Prefs.setLoanRemindersEnabled(ctx, it); LoanDueScheduler.sync(ctx) })
+                    },
+                )
+                Divider()
+                SettingRow(
                     Icons.Filled.Schedule, "Reminder time", value = Fmt.hourMinute(s.reminderHour, s.reminderMinute),
                     onClick = {
-                        showTimePicker(ctx, s.reminderHour, s.reminderMinute) { h, m ->
+                        pickers.time(s.reminderHour, s.reminderMinute) { h, m ->
                             vm.updateSettings(reschedule = true) { it.copy(reminderHour = h, reminderMinute = m) }
                         }
                     },
@@ -628,6 +652,12 @@ private fun AppsPage(
                     Spacer(Modifier.width(12.dp))
                     Switch(checked = smart, onCheckedChange = null)
                 }
+                Text(
+                    "If you turn off notifications for an app, its payments still come from your bank SMS.",
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             item {
                 OutlinedTextField(

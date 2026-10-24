@@ -137,18 +137,20 @@ internal class RupeeTransformation(private val hint: Color) : VisualTransformati
 @Composable
 private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
     val ctx = LocalContext.current
+    val pickers = rememberPickers()
+    pickers.Host()
     val haptic = LocalHapticFeedback.current
     val zone: ZoneId = vm.zone
     val isNew = original == null
-    var amountText by remember { mutableStateOf(original?.let { Money.toInput(it.amountPaise) } ?: "") }
-    var category by remember { mutableStateOf(original?.category ?: Category.OTHER) }
-    var excluded by remember { mutableStateOf(original?.excluded ?: false) }
-    var text by remember { mutableStateOf(original?.merchant ?: original?.note ?: "") }
+    var amountText by rememberDraft(vm, "entry.amount", original?.let { Money.toInput(it.amountPaise) } ?: "")
+    var category by rememberDraftOf(vm, "entry.cat", original?.category ?: Category.OTHER, { it.name }, { runCatching { Category.valueOf(it) }.getOrNull() })
+    var excluded by rememberDraftBool(vm, "entry.excl", original?.excluded ?: false)
+    var text by rememberDraft(vm, "entry.text", original?.merchant ?: original?.note ?: "")
     val initial = remember {
         original?.let { Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDateTime() } ?: java.time.LocalDateTime.now()
     }
-    var date by remember { mutableStateOf(initial.toLocalDate()) }
-    var time by remember { mutableStateOf(initial.toLocalTime().withSecond(0).withNano(0)) }
+    var date by rememberDraftDate(vm, "entry.date", initial.toLocalDate())
+    var time by rememberDraftOf(vm, "entry.time", initial.toLocalTime().withSecond(0).withNano(0), { it.toString() }, { runCatching { LocalTime.parse(it) }.getOrNull() })
     var askRule by remember { mutableStateOf<TxnEntity?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
     var showOriginal by remember { mutableStateOf(false) }
@@ -274,14 +276,14 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
                 Text("When", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     AssistChip(
-                        onClick = { showDatePicker(ctx, date) { date = it } },
+                        onClick = { pickers.date(date) { date = it } },
                         label = { Text(Fmt.dayLabel(date, LocalDate.now())) },
                         leadingIcon = { Icon(Icons.Filled.CalendarToday, contentDescription = null, modifier = Modifier.size(18.dp)) },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.defaultMinSize(minHeight = 48.dp),
                     )
                     AssistChip(
-                        onClick = { showTimePicker(ctx, time.hour, time.minute) { h, m -> time = LocalTime.of(h, m) } },
+                        onClick = { pickers.time(time.hour, time.minute) { h, m -> time = LocalTime.of(h, m) } },
                         label = { Text(Fmt.hourMinute(time.hour, time.minute)) },
                         leadingIcon = { Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.size(18.dp)) },
                         shape = RoundedCornerShape(12.dp),

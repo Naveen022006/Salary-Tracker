@@ -20,9 +20,21 @@ import com.local.salarytracker.ui.theme.SalaryTrackerTheme
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
 
+    @android.annotation.SuppressLint("InvalidFragmentVersionForActivityResult")
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // Registered here (not in composition) so the contact-picker result is delivered even if the screen was rebuilt meanwhile.
+        val phoneLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { r ->
+            vm.onPhonePicked(r.resultCode == android.app.Activity.RESULT_OK, r.data?.data)
+        }
+        val contactLauncher = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickContact()) { uri ->
+            vm.onContactPicked(uri)
+        }
+        vm.launchPhonePicker = {
+            phoneLauncher.launch(Intent(Intent.ACTION_PICK, android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI))
+        }
+        vm.launchContactPicker = { contactLauncher.launch(null) }
         if (savedInstanceState == null) handleIntent(intent)
         setContent {
             val mode by vm.themeMode.collectAsStateWithLifecycle()
@@ -49,6 +61,12 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
+    override fun onDestroy() {
+        vm.launchPhonePicker = null
+        vm.launchContactPicker = null
+        super.onDestroy()
+    }
+
     override fun onResume() {
         super.onResume()
         vm.refreshDate()
@@ -61,6 +79,10 @@ class MainActivity : ComponentActivity() {
         if (i.getBooleanExtra(Extras.OPEN_ADD_CASH, false)) {
             vm.openAddCash()
             i.removeExtra(Extras.OPEN_ADD_CASH)
+        }
+        i.getStringExtra(Extras.LOAN_PERSON_ID)?.takeIf { it.isNotEmpty() }?.let {
+            vm.openLoanPerson(it)
+            i.removeExtra(Extras.LOAN_PERSON_ID)
         }
         val id = i.getLongExtra(Extras.TXN_ID, -1L)
         if (id > 0) {

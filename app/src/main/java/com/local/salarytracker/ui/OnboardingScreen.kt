@@ -84,6 +84,8 @@ private const val STEPS = LAST_STEP + 1
 @Composable
 fun OnboardingScreen(vm: AppViewModel, initial: SettingsEntity) {
     val ctx = LocalContext.current
+    val pickers = rememberPickers()
+    pickers.Host()
     var step by rememberSaveable { mutableIntStateOf(0) }
     var salaryText by rememberSaveable { mutableStateOf(Money.toInput(initial.salaryPaise)) }
     var payDay by rememberSaveable { mutableIntStateOf(initial.payDay) }
@@ -168,7 +170,7 @@ fun OnboardingScreen(vm: AppViewModel, initial: SettingsEntity) {
                                 perm.post, "Allow", actions.askPost,
                             ) {
                                 OutlinedButton(
-                                    onClick = { showTimePicker(ctx, hour, minute) { h, m -> hour = h; minute = m } },
+                                    onClick = { pickers.time(hour, minute) { h, m -> hour = h; minute = m } },
                                     modifier = Modifier.padding(top = 12.dp).fillMaxWidth().heightIn(min = 48.dp),
                                 ) {
                                     Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.size(18.dp))

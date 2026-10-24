@@ -98,7 +98,7 @@ fun HistoryScaffold(vm: AppViewModel, content: @Composable (PaddingValues) -> Un
 }
 
 @Composable
-private fun SearchField(query: String, onChange: (String) -> Unit) {
+internal fun SearchField(query: String, placeholder: String = "Search shop or note", onChange: (String) -> Unit) {
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     TextField(
@@ -106,7 +106,7 @@ private fun SearchField(query: String, onChange: (String) -> Unit) {
         onValueChange = onChange,
         modifier = Modifier.fillMaxWidth().focusRequester(focus),
         singleLine = true,
-        placeholder = { Text("Search shop or note") },
+        placeholder = { Text(placeholder) },
         textStyle = MaterialTheme.typography.bodyLarge,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = {}),

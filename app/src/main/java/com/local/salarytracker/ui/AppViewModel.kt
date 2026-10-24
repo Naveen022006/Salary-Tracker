@@ -66,6 +66,18 @@ sealed interface ImportState {
 
 data class EditorRequest(val txnId: Long?)
 
+/** Add person sheet ([person] = null) or edit person sheet. */
+data class PersonSheetRequest(val person: com.local.salarytracker.data.PersonEntity?)
+
+/** Entry sheet for [personRemoteId]: a new entry of [kind], or the edit of [entry]. */
+data class LoanSheetRequest(
+    val personRemoteId: String,
+    val kind: com.local.salarytracker.model.LoanKind,
+    val entry: com.local.salarytracker.data.LoanEntryEntity? = null,
+)
+
+enum class LendingFilter(val label: String) { ALL("All"), OWE_ME("Owe me"), I_OWE("I owe"), SETTLED("Settled") }
+
 /** A short message for the Snackbar; [onAction] runs when the user taps [actionLabel] (for example Undo). */
 data class UiMessage(val text: String, val actionLabel: String? = null, val onAction: (() -> Unit)? = null)
 
@@ -114,6 +126,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Sign-in, sign-out and the hand-over after signing in. */
     val account = AccountController(app, repo, viewModelScope)
     val accountName = MutableStateFlow(Prefs.accountName(app))
+    /** Sync row state incl. [com.local.salarytracker.cloud.SyncUi.Waiting] (offline with changes not uploaded). */
+    val syncUi: StateFlow<com.local.salarytracker.cloud.SyncUi> = com.local.salarytracker.cloud.SyncStatus.observeUi(repo)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, com.local.salarytracker.cloud.SyncUi.Idle)
     val accountEmail = MutableStateFlow(Prefs.accountEmail(app))
 
     init {
@@ -151,6 +166,62 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     val editor = MutableStateFlow<EditorRequest?>(null)
+
+    /** Selected bottom tab; lives here so it survives the composition being rebuilt (contact picker, other apps). */
+    val tab = MutableStateFlow(0)
+
+    /** Text of open sheets; lives here (not in composition) so it survives leaving the app and coming back. */
+    val drafts = androidx.compose.runtime.mutableStateMapOf<String, String>()
+    fun clearDrafts(prefix: String) {
+        drafts.keys.filter { it.startsWith(prefix) }.forEach { drafts.remove(it) }
+    }
+
+    /** Set by MainActivity (registered in onCreate, so results arrive even after the screen was recreated). */
+    var launchPhonePicker: (() -> Unit)? = null
+    var launchContactPicker: (() -> Unit)? = null
+
+    fun pickContact() {
+        drafts["person.contactNote"] = ""
+        try {
+            val l = launchPhonePicker
+            if (l == null) drafts["person.contactNote"] = "No Contacts app found. Type the name and number." else l()
+        } catch (_: Exception) {
+            launchFallbackContact()
+        }
+    }
+
+    private fun launchFallbackContact() {
+        try {
+            launchContactPicker?.invoke()
+        } catch (_: Exception) {
+            drafts["person.contactNote"] = "No Contacts app found. Type the name and number."
+        }
+    }
+
+    fun onPhonePicked(ok: Boolean, uri: android.net.Uri?) {
+        if (!ok) return
+        val c = if (uri == null) null else try { readPhoneRow(appCtx, uri) } catch (_: Exception) { null }
+        if (c != null) applyContact(c) else launchFallbackContact()
+    }
+
+    fun onContactPicked(uri: android.net.Uri?) {
+        if (uri == null) return
+        val c = try { readContact(appCtx, uri) } catch (_: Exception) { null }
+        if (c != null) applyContact(c) else drafts["person.contactNote"] = "Could not read this contact. Type the name and number."
+    }
+
+    private fun applyContact(c: PickedContact) {
+        if (drafts["person.name"].isNullOrBlank() && !c.name.isNullOrBlank()) {
+            drafts["person.name"] = c.name.trim().take(com.local.salarytracker.budget.LoanMath.NAME_MAX)
+        }
+        val num = com.local.salarytracker.budget.LoanMath.normalizePhone(c.phone)
+        if (num != null) {
+            drafts["person.phone"] = num
+            drafts["person.contactNote"] = ""
+        } else {
+            drafts["person.contactNote"] = "This contact has no phone number we can read. Type it if you need it."
+        }
+    }
     val importState = MutableStateFlow<ImportState>(ImportState.Idle)
     val rules: StateFlow<List<CategoryRuleEntity>> =
         repo.observeRules().map { l -> l.sortedBy { it.keyword } }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
@@ -291,16 +362,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             repo.deleteAllTxns()
             repo.deleteAllRules()
+            repo.deleteAllLending()
             onDone()
         }
     }
 
     // ------------------------------------------------------------ entries
     fun openAddCash() {
+        clearDrafts("entry.")
         editor.value = EditorRequest(null)
     }
 
     fun openEntry(id: Long) {
+        clearDrafts("entry.")
         editor.value = EditorRequest(id)
     }
 
@@ -345,6 +419,111 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ------------------------------------------------------------ lending (never touches the daily budget)
+    /** null while loading */
+    val lendingPeople: StateFlow<List<com.local.salarytracker.budget.PersonBalance>?> =
+        repo.observePeopleWithBalance().map<List<com.local.salarytracker.budget.PersonBalance>, List<com.local.salarytracker.budget.PersonBalance>?> { it }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val lendingTotals: StateFlow<com.local.salarytracker.budget.LendingTotals?> =
+        repo.observeLendingTotals().map<com.local.salarytracker.budget.LendingTotals, com.local.salarytracker.budget.LendingTotals?> { it }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** remoteId of the person whose screen is open inside the Lending tab; null = the Lending home. */
+    val selectedPerson = MutableStateFlow<String?>(null)
+    val lendingFilter = MutableStateFlow(LendingFilter.ALL)
+    val lendingSearchOpen = MutableStateFlow(false)
+    val lendingQuery = MutableStateFlow("")
+    val personSheet = MutableStateFlow<PersonSheetRequest?>(null)
+    val loanSheet = MutableStateFlow<LoanSheetRequest?>(null)
+
+    /** Set by a reminder tap: MainScreen switches to the Lending tab once and clears it. */
+    val lendingTabRequest = MutableStateFlow(false)
+
+    fun closeLendingSearch() {
+        lendingSearchOpen.value = false
+        lendingQuery.value = ""
+    }
+
+    fun openLoanPerson(remoteId: String) {
+        selectedPerson.value = remoteId
+        closeLendingSearch()
+        lendingTabRequest.value = true
+    }
+
+    fun openPersonSheet(person: com.local.salarytracker.data.PersonEntity?) {
+        clearDrafts("person.")
+        personSheet.value = PersonSheetRequest(person)
+    }
+
+    fun openLoanSheet(personRemoteId: String, kind: com.local.salarytracker.model.LoanKind, entry: com.local.salarytracker.data.LoanEntryEntity? = null) {
+        clearDrafts("loan.")
+        loanSheet.value = LoanSheetRequest(personRemoteId, kind, entry)
+    }
+
+    suspend fun findPerson(name: String) = repo.findPersonByName(name)
+
+    fun savePerson(existing: com.local.salarytracker.data.PersonEntity?, name: String, phone: String?, note: String?) {
+        viewModelScope.launch {
+            try {
+                if (existing == null) {
+                    val p = repo.addPerson(name, phone, note)
+                    messages.tryEmit(UiMessage("Added ${p.name}"))
+                } else {
+                    val p = repo.updatePerson(existing.copy(name = name, phone = phone, note = note))
+                    messages.tryEmit(UiMessage(if (p != null) "Saved ${p.name}" else "This person was removed"))
+                }
+            } catch (_: IllegalArgumentException) {
+                messages.tryEmit(UiMessage("Type a name first"))
+            }
+        }
+    }
+
+    /** Deletes the person and their entries; the snackbar offers Undo. */
+    fun deletePerson(p: com.local.salarytracker.data.PersonEntity) {
+        viewModelScope.launch {
+            repo.deletePerson(p.remoteId)
+            if (selectedPerson.value == p.remoteId) selectedPerson.value = null
+            messages.tryEmit(UiMessage("Deleted ${p.name}", "Undo") { viewModelScope.launch { repo.restorePerson(p.remoteId) } })
+        }
+    }
+
+    fun saveLoan(
+        existing: com.local.salarytracker.data.LoanEntryEntity?,
+        personRemoteId: String,
+        kind: com.local.salarytracker.model.LoanKind,
+        amountPaise: Long,
+        method: com.local.salarytracker.model.LoanMethod,
+        appName: String?,
+        occurredAt: Long,
+        dueDate: LocalDate?,
+        note: String?,
+    ) {
+        viewModelScope.launch {
+            try {
+                if (existing == null) {
+                    repo.addLoanEntry(personRemoteId, kind, amountPaise, method, appName, occurredAt, dueDate, note)
+                } else {
+                    repo.updateLoanEntry(
+                        existing.copy(
+                            kind = kind, amountPaise = amountPaise, method = method, appName = appName,
+                            occurredAt = occurredAt, dueDate = dueDate?.toString(), note = note,
+                        ),
+                    )
+                }
+                messages.tryEmit(UiMessage("Saved ${Money.format(amountPaise)} · ${kind.label}"))
+            } catch (_: IllegalArgumentException) {
+                messages.tryEmit(UiMessage("Could not save this entry"))
+            }
+        }
+    }
+
+    fun deleteLoan(e: com.local.salarytracker.data.LoanEntryEntity) {
+        viewModelScope.launch {
+            repo.deleteLoanEntry(e.remoteId)
+            messages.tryEmit(UiMessage("Entry deleted", "Undo") { viewModelScope.launch { repo.restoreLoanEntry(e.remoteId) } })
+        }
+    }
+
     // ------------------------------------------------------------ SMS import
     fun hasSmsPermission(): Boolean =
         ContextCompat.checkSelfPermission(appCtx, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
@@ -377,7 +556,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** "Sync now" in Settings. */
     fun syncNow() {
         viewModelScope.launch {
-            when (SyncEngine.sync(appCtx)) {
+            when (SyncEngine.sync(appCtx, reprobe = true)) {
                 SyncResult.Ok -> messages.tryEmit(UiMessage("Synced"))
                 SyncResult.Skipped -> messages.tryEmit(UiMessage("Already synced a moment ago"))
                 else -> {} // the Sync row shows the problem
@@ -388,8 +567,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** On app open: sync when the last sync was more than 5 minutes ago. */
     fun syncIfStale() {
         if (Prefs.ownerUserId(appCtx).isEmpty()) return
-        if (System.currentTimeMillis() - Prefs.lastSyncMs(appCtx) < 5 * 60_000L) return
-        viewModelScope.launch { SyncEngine.sync(appCtx) }
+        val hintShown = com.local.salarytracker.cloud.SyncStatus.hint.value != null
+        if (!hintShown && System.currentTimeMillis() - Prefs.lastSyncMs(appCtx) < 5 * 60_000L) return
+        viewModelScope.launch { SyncEngine.sync(appCtx, reprobe = true) }
     }
 
     /** True once after an existing phone's data was linked to the new account (shows a one-time note). */

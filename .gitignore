@@ -26,3 +26,6 @@ supabase/.env
 supabase/functions/.env
 supabase/.temp/
 supabase/.branches/
+
+# Supabase database SQL and the Ask tab Edge Function: kept only on this PC (owner's choice), never on GitHub.
+supabase/

@@ -16,6 +16,10 @@ import com.local.salarytracker.budget.DayBar
 import com.local.salarytracker.budget.PeriodReport
 import com.local.salarytracker.budget.TodayInsights
 import com.local.salarytracker.capture.InboxScanner
+import com.local.salarytracker.cloud.AccountController
+import com.local.salarytracker.cloud.CloudEvents
+import com.local.salarytracker.cloud.SyncEngine
+import com.local.salarytracker.cloud.SyncResult
 import com.local.salarytracker.data.AppDatabase
 import com.local.salarytracker.data.CategoryRuleEntity
 import com.local.salarytracker.data.Repository
@@ -107,7 +111,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** First day counted for the budget (kept in Prefs, no DB change). null until onboarding is done. */
     val trackingStart = MutableStateFlow(Prefs.trackingStart(app))
 
+    /** Sign-in, sign-out and the hand-over after signing in. */
+    val account = AccountController(app, repo, viewModelScope)
+    val accountName = MutableStateFlow(Prefs.accountName(app))
+    val accountEmail = MutableStateFlow(Prefs.accountEmail(app))
+
     init {
+        // The cloud profile was applied (or the phone was wiped): re-read the values kept in Prefs.
+        viewModelScope.launch {
+            CloudEvents.profileApplied.collect {
+                themeMode.value = Prefs.themeMode(appCtx)
+                trackingStart.value = Prefs.trackingStart(appCtx)
+                accountName.value = Prefs.accountName(appCtx)
+                accountEmail.value = Prefs.accountEmail(appCtx)
+            }
+        }
         viewModelScope.launch {
             settingsNN.collect { s ->
                 if (s.onboardingDone && trackingStart.value == null) setTrackingStart(LocalDate.now())
@@ -268,6 +286,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { repo.deleteRule(keyword) }
     }
 
+    /** Deletes all entries and learned categories (also in the cloud, because the deletes sync like any change). */
     fun deleteAllData(onDone: () -> Unit) {
         viewModelScope.launch {
             repo.deleteAllTxns()
@@ -352,5 +371,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (!s.onboardingDone || !s.smsEnabled || s.lastSmsScanTime <= 0 || !hasSmsPermission()) return@launch
             InboxScanner(appCtx).scan(s.lastSmsScanTime)
         }
+    }
+
+    // ------------------------------------------------------------ cloud
+    /** "Sync now" in Settings. */
+    fun syncNow() {
+        viewModelScope.launch {
+            when (SyncEngine.sync(appCtx)) {
+                SyncResult.Ok -> messages.tryEmit(UiMessage("Synced"))
+                SyncResult.Skipped -> messages.tryEmit(UiMessage("Already synced a moment ago"))
+                else -> {} // the Sync row shows the problem
+            }
+        }
+    }
+
+    /** On app open: sync when the last sync was more than 5 minutes ago. */
+    fun syncIfStale() {
+        if (Prefs.ownerUserId(appCtx).isEmpty()) return
+        if (System.currentTimeMillis() - Prefs.lastSyncMs(appCtx) < 5 * 60_000L) return
+        viewModelScope.launch { SyncEngine.sync(appCtx) }
+    }
+
+    /** True once after an existing phone's data was linked to the new account (shows a one-time note). */
+    fun consumeAdoptNote(): Boolean {
+        if (!Prefs.adoptNotePending(appCtx)) return false
+        Prefs.setAdoptNotePending(appCtx, false)
+        return true
     }
 }

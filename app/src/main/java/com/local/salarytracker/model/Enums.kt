@@ -37,3 +37,27 @@ enum class Category(
         fun fromName(name: String?): Category = entries.firstOrNull { it.name == name } ?: OTHER
     }
 }
+
+/**
+ * What happened in a lending entry. [sign] says how it moves the person's balance
+ * (positive balance = they owe you, negative = you owe them).
+ */
+enum class LoanKind(val label: String, val sign: Int) {
+    GAVE("I gave", +1),
+    GOT_BACK("I got back", -1),
+    BORROWED("I borrowed", -1),
+    PAID_BACK("I paid back", +1);
+
+    companion object {
+        fun fromName(name: String?): LoanKind? = entries.firstOrNull { it.name == name }
+    }
+}
+
+/** How the money moved. The payment app (GPay, PhonePe ...) is kept separately in `LoanEntryEntity.appName`. */
+enum class LoanMethod(val label: String) {
+    CASH("Cash"), UPI("UPI"), BANK("Bank transfer"), CARD("Card"), OTHER("Other");
+
+    companion object {
+        fun fromName(name: String?): LoanMethod = entries.firstOrNull { it.name == name } ?: OTHER
+    }
+}

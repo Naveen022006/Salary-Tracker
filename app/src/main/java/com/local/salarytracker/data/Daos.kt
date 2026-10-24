@@ -85,6 +85,9 @@ interface TxnDao {
     @Query("SELECT COUNT(*) FROM txn WHERE dirty = 1")
     suspend fun dirtyCount(): Int
 
+    @Query("SELECT COUNT(*) FROM txn WHERE dirty = 1")
+    fun observeDirtyCount(): Flow<Int>
+
     /** Clears dirty only if the row was not edited again while it was being uploaded. */
     @Query("UPDATE txn SET dirty = 0 WHERE id = :id AND updatedAt = :updatedAt")
     suspend fun markClean(id: Long, updatedAt: Long)
@@ -143,6 +146,9 @@ interface RuleDao {
 
     @Query("SELECT COUNT(*) FROM category_rule WHERE dirty = 1")
     suspend fun dirtyCount(): Int
+
+    @Query("SELECT COUNT(*) FROM category_rule WHERE dirty = 1")
+    fun observeDirtyCount(): Flow<Int>
 
     @Query("UPDATE category_rule SET dirty = 0 WHERE keyword = :keyword AND updatedAt = :updatedAt")
     suspend fun markClean(keyword: String, updatedAt: Long)

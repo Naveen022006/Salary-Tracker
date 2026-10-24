@@ -116,4 +116,78 @@ class MigrationSqlTest {
         val n = db.createStatement().use { st -> st.executeQuery("SELECT COUNT(DISTINCT u) FROM t").use { it.next(); it.getInt(1) } }
         assertEquals(200, n)
     }
+
+    // ------------------------------------------------------------ v2 -> v3 (Lending)
+    private fun createV2() {
+        listOf("txn", "category_rule", "settings").forEach { t -> createSql(2, t).forEach(::exec) }
+    }
+
+    private fun count(table: String): Int =
+        db.createStatement().use { st -> st.executeQuery("SELECT COUNT(*) FROM `$table`").use { it.next(); it.getInt(1) } }
+
+    @Test fun v2DataSurvivesTheLendingMigration() {
+        createV2()
+        exec("INSERT INTO txn (amountPaise,type,timestamp,category,source,excluded,bodyHash,rawText,createdAt,remoteId,updatedAt,deleted,dirty) VALUES (25000,'DEBIT',1000,'FOOD','SMS',0,'h1','raw one',1111,'r-1',1111,0,0)")
+        exec("INSERT INTO txn (amountPaise,type,timestamp,category,source,excluded,createdAt,remoteId,updatedAt,deleted,dirty) VALUES (500,'CREDIT',3000,'OTHER','MANUAL',0,3333,'r-2',3333,1,1)")
+        exec("INSERT INTO category_rule (keyword,category,updatedAt,deleted,dirty) VALUES ('swiggy','FOOD',5,0,0)")
+
+        MigrationSql.V2_TO_V3.forEach(::exec)
+
+        assertEquals(2, count("txn"))
+        assertEquals(1, count("category_rule"))
+        assertEquals(0, count("person"))
+        assertEquals(0, count("loan_entry"))
+        db.createStatement().use { st ->
+            st.executeQuery("SELECT remoteId, rawText, dirty FROM txn WHERE bodyHash='h1'").use { rs ->
+                rs.next()
+                assertEquals("r-1", rs.getString("remoteId"))
+                assertEquals("raw one", rs.getString("rawText"))
+                assertEquals(0, rs.getInt("dirty"))
+            }
+            st.executeQuery("SELECT deleted, dirty FROM txn WHERE remoteId='r-2'").use { rs ->
+                rs.next()
+                assertEquals(1, rs.getInt("deleted"))
+                assertEquals(1, rs.getInt("dirty"))
+            }
+        }
+        // the new tables are usable
+        exec("INSERT INTO person (remoteId,name,createdAt,updatedAt,deleted,dirty) VALUES ('p-1','Ramesh',1,1,0,1)")
+        exec("INSERT INTO loan_entry (remoteId,personRemoteId,kind,amountPaise,method,occurredAt,updatedAt,deleted,dirty) VALUES ('e-1','p-1','GAVE',100,'CASH',1,1,0,1)")
+        assertEquals(1, count("person"))
+        assertEquals(1, count("loan_entry"))
+    }
+
+    @Test fun lendingMigrationIsRepeatableAndKeepsUniqueRemoteIds() {
+        createV2()
+        MigrationSql.V2_TO_V3.forEach(::exec)
+        MigrationSql.V2_TO_V3.forEach(::exec) // IF NOT EXISTS: running twice must not fail
+        exec("INSERT INTO person (remoteId,name,createdAt,updatedAt,deleted,dirty) VALUES ('p-1','A',1,1,0,1)")
+        val dup = runCatching { exec("INSERT INTO person (remoteId,name,createdAt,updatedAt,deleted,dirty) VALUES ('p-1','B',1,1,0,1)") }
+        assertTrue("duplicate person remoteId must be rejected", dup.isFailure)
+    }
+
+    @Test fun migratedLendingTablesMatchRoomsExportedV3Schema() {
+        createV2()
+        MigrationSql.V2_TO_V3.forEach(::exec)
+        val tables = listOf("txn", "category_rule", "settings", "person", "loan_entry")
+        val migrated = tables.associateWith { columns(it) }
+        val migratedIndexes = indexNames()
+
+        db.close()
+        db = DriverManager.getConnection("jdbc:sqlite::memory:")
+        tables.forEach { t -> createSql(3, t).forEach(::exec) }
+        val fresh = tables.associateWith { columns(it) }
+
+        for (t in tables) {
+            assertEquals("columns of $t", fresh.getValue(t).sortedBy { it.name }, migrated.getValue(t).sortedBy { it.name })
+        }
+        assertEquals("indices", indexNames(), migratedIndexes)
+        assertTrue(indexNames().containsAll(listOf("index_person_remoteId", "index_loan_entry_remoteId", "index_loan_entry_personRemoteId")))
+    }
+
+    private fun indexNames(): List<String> = db.createStatement().use { st ->
+        st.executeQuery("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'index_%' ORDER BY name").use { rs ->
+            buildList { while (rs.next()) add(rs.getString(1)) }
+        }
+    }
 }

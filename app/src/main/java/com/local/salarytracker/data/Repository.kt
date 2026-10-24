@@ -12,7 +12,17 @@ import com.local.salarytracker.Prefs
 import com.local.salarytracker.cloud.SyncScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import java.time.LocalDate
+import com.local.salarytracker.budget.DueLoan
+import com.local.salarytracker.budget.LendingTotals
+import com.local.salarytracker.budget.LoanMath
+import com.local.salarytracker.budget.PersonBalance
+import com.local.salarytracker.model.LoanKind
+import com.local.salarytracker.model.LoanMethod
 import kotlinx.coroutines.withContext
 
 fun TxnEntity.toKey() = TxnKey(amountPaise, type, timestamp, upiRef, source)
@@ -25,6 +35,8 @@ class Repository(private val db: AppDatabase) {
     private val txns get() = db.txnDao()
     private val settingsDao get() = db.settingsDao()
     private val rules get() = db.ruleDao()
+    private val people get() = db.personDao()
+    private val loans get() = db.loanDao()
 
     // ------------------------------------------------------------ settings
     /** Emits defaults until the row exists. */
@@ -47,7 +59,7 @@ class Repository(private val db: AppDatabase) {
 
     /** A local data change happened: upload soon (debounced, only when signed in). */
     private fun changed() {
-        AppDatabase.appContext?.let { SyncScheduler.requestSoon(it) }
+        AppDatabase.appContext?.let { SyncScheduler.onLocalChange(it) }
     }
     suspend fun updateSettings(transform: (SettingsEntity) -> SettingsEntity) = saveSettings(transform(getSettings()))
 
@@ -197,15 +209,194 @@ class Repository(private val db: AppDatabase) {
     // ------------------------------------------------------------ cloud account helpers
     /** True when this phone holds anything the user created (entries, learned categories or finished setup). */
     suspend fun hasLocalData(): Boolean =
-        txns.countAll() > 0 || rules.countAll() > 0 || (settingsDao.get()?.onboardingDone == true)
+        txns.countAll() > 0 || rules.countAll() > 0 || people.countAll() > 0 || loans.countAll() > 0 ||
+            (settingsDao.get()?.onboardingDone == true)
 
     /** Number of local changes not uploaded yet (rows only; the profile flag is added by the caller). */
-    suspend fun unsyncedCount(): Int = txns.dirtyCount() + rules.dirtyCount()
+    suspend fun unsyncedCount(): Int = txns.dirtyCount() + rules.dirtyCount() + people.dirtyCount() + loans.dirtyCount()
+
+    /**
+     * Live number of local changes waiting for upload: dirty entries + learned categories + people + lending entries,
+     * plus 1 while the profile (settings) is not uploaded. Drives "3 changes waiting for internet".
+     */
+    fun observeUnsyncedCount(): Flow<Int> {
+        val app = AppDatabase.appContext
+        val profile: Flow<Int> = if (app == null) flowOf(0) else Prefs.profileDirtyFlow(app).map { if (it) 1 else 0 }
+        return combine(
+            txns.observeDirtyCount(), rules.observeDirtyCount(), people.observeDirtyCount(), loans.observeDirtyCount(), profile,
+        ) { a, b, c, d, e -> a + b + c + d + e }
+    }
 
     /** First sign-in on a phone that already has data: every row is uploaded to the new account. */
     suspend fun markAllDirty() {
         txns.markAllDirty()
         rules.markAllDirty()
+        people.markAllDirty()
+        loans.markAllDirty()
+    }
+
+    // ------------------------------------------------------------ lending (separate from txns: never affects the budget)
+    /**
+     * Adds a person. [name] is trimmed and cut to 80 characters; [phone] is normalised (leading +, digits only, max 20).
+     * @throws IllegalArgumentException when the name is blank.
+     */
+    suspend fun addPerson(name: String, phone: String? = null, note: String? = null): PersonEntity {
+        val n = name.trim().take(LoanMath.NAME_MAX)
+        require(n.isNotEmpty()) { "name is empty" }
+        val p = PersonEntity(
+            name = n,
+            phone = LoanMath.normalizePhone(phone),
+            note = note?.trim()?.takeIf { it.isNotEmpty() }?.take(LoanMath.NOTE_MAX),
+        )
+        val saved = p.copy(id = people.insert(p))
+        changed()
+        return saved
+    }
+
+    /** Saves new name / phone / note of [person] (matched by remoteId); returns the stored row, or null if it no longer exists. */
+    suspend fun updatePerson(person: PersonEntity): PersonEntity? {
+        val old = people.active(person.remoteId) ?: return null
+        val n = person.name.trim().take(LoanMath.NAME_MAX)
+        require(n.isNotEmpty()) { "name is empty" }
+        val updated = old.copy(
+            name = n,
+            phone = LoanMath.normalizePhone(person.phone),
+            note = person.note?.trim()?.takeIf { it.isNotEmpty() }?.take(LoanMath.NOTE_MAX),
+            updatedAt = System.currentTimeMillis(),
+            dirty = true,
+        )
+        people.update(updated)
+        changed()
+        return updated
+    }
+
+    /**
+     * Soft-deletes the person AND all their entries (same timestamp, so [restorePerson] can bring back exactly those).
+     * Hidden at once; removed for good after the delete has been uploaded.
+     */
+    suspend fun deletePerson(remoteId: String) {
+        val now = System.currentTimeMillis()
+        loans.softDeleteForPerson(remoteId, now)
+        people.softDelete(remoteId, now)
+        changed()
+    }
+
+    /** Undo of [deletePerson]: brings back the person and the entries deleted with them. False if already purged. */
+    suspend fun restorePerson(remoteId: String): Boolean {
+        val p = people.byRemoteId(remoteId) ?: return false
+        if (!p.deleted) return true
+        val now = System.currentTimeMillis()
+        people.update(p.copy(deleted = false, dirty = true, updatedAt = now))
+        loans.restoreForPerson(remoteId, p.updatedAt, now)
+        changed()
+        return true
+    }
+
+    /** First active person with this name (case-insensitive), for a "you already have Ramesh" warning. */
+    suspend fun findPersonByName(name: String): PersonEntity? = people.activeByName(name.trim())
+
+    /**
+     * Records a lending entry. [kind] gives the direction, [amountPaise] must be > 0 (max 1,000,000,000.00 rupees),
+     * [appName] is e.g. "GPay"/"PhonePe"/"Paytm"/"Navi" (max 40 chars), [dueDate] the optional "return by" date.
+     * @throws IllegalArgumentException for a bad amount or an unknown / deleted person.
+     */
+    suspend fun addLoanEntry(
+        personRemoteId: String,
+        kind: LoanKind,
+        amountPaise: Long,
+        method: LoanMethod,
+        appName: String? = null,
+        occurredAt: Long = System.currentTimeMillis(),
+        dueDate: LocalDate? = null,
+        note: String? = null,
+    ): LoanEntryEntity {
+        require(amountPaise in 1..LoanMath.AMOUNT_MAX_PAISE) { "amount out of range" }
+        requireNotNull(people.active(personRemoteId)) { "unknown person" }
+        val e = LoanEntryEntity(
+            personRemoteId = personRemoteId,
+            kind = kind,
+            amountPaise = amountPaise,
+            method = method,
+            appName = appName?.trim()?.takeIf { it.isNotEmpty() }?.take(LoanMath.APP_NAME_MAX),
+            occurredAt = occurredAt,
+            dueDate = dueDate?.toString(),
+            note = note?.trim()?.takeIf { it.isNotEmpty() }?.take(LoanMath.NOTE_MAX),
+        )
+        val saved = e.copy(id = loans.insert(e))
+        changed()
+        return saved
+    }
+
+    /** Saves changes to an entry (matched by remoteId; the person cannot be changed). Returns the stored row, or null if gone. */
+    suspend fun updateLoanEntry(entry: LoanEntryEntity): LoanEntryEntity? {
+        require(entry.amountPaise in 1..LoanMath.AMOUNT_MAX_PAISE) { "amount out of range" }
+        val old = loans.active(entry.remoteId) ?: return null
+        val updated = old.copy(
+            kind = entry.kind,
+            amountPaise = entry.amountPaise,
+            method = entry.method,
+            appName = entry.appName?.trim()?.takeIf { it.isNotEmpty() }?.take(LoanMath.APP_NAME_MAX),
+            occurredAt = entry.occurredAt,
+            dueDate = entry.dueDate,
+            note = entry.note?.trim()?.takeIf { it.isNotEmpty() }?.take(LoanMath.NOTE_MAX),
+            updatedAt = System.currentTimeMillis(),
+            dirty = true,
+        )
+        loans.update(updated)
+        changed()
+        return updated
+    }
+
+    /** Soft delete of one entry (use [restoreLoanEntry] for Undo). */
+    suspend fun deleteLoanEntry(remoteId: String) {
+        loans.softDelete(remoteId, System.currentTimeMillis())
+        changed()
+    }
+
+    /** Undo of [deleteLoanEntry]. False if the entry was already purged. */
+    suspend fun restoreLoanEntry(remoteId: String): Boolean {
+        val e = loans.byRemoteId(remoteId) ?: return false
+        if (e.deleted) {
+            loans.update(e.copy(deleted = false, dirty = true, updatedAt = System.currentTimeMillis()))
+            changed()
+        }
+        return true
+    }
+
+    /** Everyone with their balance, overdue / due-today counts and last activity, sorted by name. Re-emits on every change. */
+    fun observePeopleWithBalance(): Flow<List<PersonBalance>> =
+        combine(people.observeAll(), loans.observeAllActive()) { ps, es -> LoanMath.summarize(ps, es, LocalDate.now()) }
+
+    /** One person with balance info (null when deleted / unknown). */
+    fun observePersonWithBalance(remoteId: String): Flow<PersonBalance?> =
+        combine(people.observeByRemoteId(remoteId), loans.observeForPerson(remoteId)) { p, es ->
+            p?.let { LoanMath.summarize(listOf(it), es, LocalDate.now()).first() }
+        }
+
+    fun observePerson(remoteId: String): Flow<PersonEntity?> = people.observeByRemoteId(remoteId)
+
+    /** The person's entries, newest first (use `LoanMath.runningBalances` for the running balance column). */
+    fun observeEntries(personRemoteId: String): Flow<List<LoanEntryEntity>> = loans.observeForPerson(personRemoteId)
+
+    /** "You will get" / "You need to pay" over all people. */
+    fun observeLendingTotals(): Flow<LendingTotals> =
+        combine(people.observeAll(), loans.observeAllActive()) { ps, es ->
+            val byPerson = es.groupBy { it.personRemoteId }
+            LoanMath.totals(ps.map { LoanMath.balance(byPerson[it.remoteId].orEmpty()) })
+        }
+
+    /** Entries that are due today or overdue (and still open), most overdue first. Used by the reminder worker. */
+    suspend fun dueEntries(today: LocalDate): List<DueLoan> {
+        if (loans.dueOnOrBefore(today.toString()).isEmpty()) return emptyList()
+        return LoanMath.dueLoans(people.observeAll().first(), loans.getAllActive(), today)
+    }
+
+    /** Soft-deletes all people and entries (part of "Delete all data": the deletes sync to the cloud). */
+    suspend fun deleteAllLending() {
+        val now = System.currentTimeMillis()
+        loans.softDeleteAll(now)
+        people.softDeleteAll(now)
+        changed()
     }
 
     /** Removes everything stored on this phone (used on sign out / account switch). */

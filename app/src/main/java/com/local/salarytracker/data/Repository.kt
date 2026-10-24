@@ -8,8 +8,12 @@ import com.local.salarytracker.parse.Dedupe
 import com.local.salarytracker.parse.MerchantPick
 import com.local.salarytracker.parse.ParsedTxn
 import com.local.salarytracker.parse.TxnKey
+import com.local.salarytracker.Prefs
+import com.local.salarytracker.cloud.SyncScheduler
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 fun TxnEntity.toKey() = TxnKey(amountPaise, type, timestamp, upiRef, source)
 
@@ -27,7 +31,24 @@ class Repository(private val db: AppDatabase) {
     val settings: Flow<SettingsEntity> get() = settingsDao.observe().map { it ?: SettingsEntity() }
 
     suspend fun getSettings(): SettingsEntity = settingsDao.get() ?: SettingsEntity()
-    suspend fun saveSettings(s: SettingsEntity) = settingsDao.upsert(s.copy(id = 0))
+    suspend fun saveSettings(s: SettingsEntity) {
+        val old = settingsDao.get()
+        settingsDao.upsert(s.copy(id = 0))
+        // lastSmsScanTime is a local bookmark; everything else is part of the cloud profile.
+        if (old == null || old.copy(lastSmsScanTime = 0) != s.copy(id = 0, lastSmsScanTime = 0)) {
+            AppDatabase.appContext?.let { Prefs.markProfileChanged(it) }
+        }
+    }
+
+    /** Applies settings that came from the cloud: no dirty flag, keeps this phone's SMS scan bookmark. */
+    suspend fun applyRemoteSettings(transform: (SettingsEntity) -> SettingsEntity) {
+        settingsDao.upsert(transform(getSettings()).copy(id = 0))
+    }
+
+    /** A local data change happened: upload soon (debounced, only when signed in). */
+    private fun changed() {
+        AppDatabase.appContext?.let { SyncScheduler.requestSoon(it) }
+    }
     suspend fun updateSettings(transform: (SettingsEntity) -> SettingsEntity) = saveSettings(transform(getSettings()))
 
     // ------------------------------------------------------------ queries
@@ -43,8 +64,8 @@ class Repository(private val db: AppDatabase) {
     suspend fun latestTimestamp(): Long? = txns.latestTimestamp()
     suspend fun learnedRules(): Map<String, Category> = rules.getAll().associate { it.keyword to it.category }
     fun observeRules(): Flow<List<CategoryRuleEntity>> = rules.observeAll()
-    suspend fun deleteAllRules() = rules.deleteAll()
-    suspend fun deleteRule(keyword: String) = rules.delete(CategoryRuleEntity(keyword, Category.OTHER))
+    suspend fun deleteAllRules() { rules.softDeleteAll(System.currentTimeMillis()); changed() }
+    suspend fun deleteRule(keyword: String) { rules.softDelete(keyword, System.currentTimeMillis()); changed() }
 
     // ------------------------------------------------------------ capture
     /**
@@ -84,7 +105,7 @@ class Repository(private val db: AppDatabase) {
                 // SMS is the authoritative source for amount/time
                 timestamp = if (source == TxnSource.SMS && dup.source != TxnSource.SMS) ts else dup.timestamp,
             )
-            if (enriched != dup) txns.update(enriched)
+            if (enriched != dup) { txns.update(enriched.touched()); changed() }
             return null
         }
 
@@ -104,6 +125,7 @@ class Repository(private val db: AppDatabase) {
         )
         val id = txns.insert(entity)
         if (id == -1L) return null
+        changed()
         return entity.copy(id = id)
     }
 
@@ -117,26 +139,40 @@ class Repository(private val db: AppDatabase) {
             source = TxnSource.MANUAL,
             note = note?.takeIf { it.isNotBlank() },
         )
-        return e.copy(id = txns.insert(e))
+        val saved = e.copy(id = txns.insert(e))
+        changed()
+        return saved
     }
 
-    suspend fun updateTxn(txn: TxnEntity) = txns.update(txn)
-    suspend fun deleteTxn(txn: TxnEntity) = txns.delete(txn)
+    private fun TxnEntity.touched() = copy(updatedAt = System.currentTimeMillis(), dirty = true)
 
-    /** Puts a deleted txn back with its old id (used by the Undo button). */
+    suspend fun updateTxn(txn: TxnEntity) {
+        txns.update(txn.touched())
+        changed()
+    }
+
+    /** Soft delete: the row is hidden at once and removed for good after the delete is uploaded. */
+    suspend fun deleteTxn(txn: TxnEntity) {
+        txns.softDelete(txn.id, System.currentTimeMillis())
+        changed()
+    }
+
+    /** Puts a deleted txn back (used by the Undo button). */
     suspend fun restoreTxn(txn: TxnEntity) {
-        txns.insert(txn)
+        val restored = txn.copy(deleted = false).touched()
+        if (txns.byIdAny(txn.id) != null) txns.update(restored) else txns.insert(restored)
+        changed()
     }
     /** Test hook: deletes one txn by id; returns the number deleted (0 or 1). */
-    suspend fun deleteTxnById(id: Long): Int = txns.getById(id)?.let { txns.delete(it); 1 } ?: 0
+    suspend fun deleteTxnById(id: Long): Int = txns.getById(id)?.let { deleteTxn(it); 1 } ?: 0
 
     /** Test hook: deletes txns with timestamp >= [sinceMillis] whose merchant starts with [prefix] (case-insensitive). */
     suspend fun deleteByMerchantPrefix(prefix: String, sinceMillis: Long): Int {
         val hits = txns.findSinceWithMerchant(sinceMillis).filter { it.merchant!!.startsWith(prefix, ignoreCase = true) }
-        hits.forEach { txns.delete(it) }
+        hits.forEach { deleteTxn(it) }
         return hits.size
     }
-    suspend fun deleteAllTxns() = txns.deleteAll()
+    suspend fun deleteAllTxns() { txns.softDeleteAll(System.currentTimeMillis()); changed() }
 
     /**
      * Changes a txn's category. With [rememberForMerchant] (and a merchant present) saves a learned rule
@@ -144,16 +180,34 @@ class Repository(private val db: AppDatabase) {
      */
     suspend fun setCategory(txn: TxnEntity, category: Category, rememberForMerchant: Boolean): TxnEntity {
         val updated = txn.copy(category = category)
-        txns.update(updated)
+        txns.update(updated.touched())
         val m = txn.merchant?.trim()
         if (rememberForMerchant && !m.isNullOrEmpty()) {
             rules.upsert(CategoryRuleEntity(m.lowercase(), category))
             for (other in txns.findByMerchant(m)) {
                 if (other.id != txn.id && other.category != category && !other.excluded) {
-                    txns.update(other.copy(category = category))
+                    txns.update(other.copy(category = category).touched())
                 }
             }
         }
+        changed()
         return updated
     }
+
+    // ------------------------------------------------------------ cloud account helpers
+    /** True when this phone holds anything the user created (entries, learned categories or finished setup). */
+    suspend fun hasLocalData(): Boolean =
+        txns.countAll() > 0 || rules.countAll() > 0 || (settingsDao.get()?.onboardingDone == true)
+
+    /** Number of local changes not uploaded yet (rows only; the profile flag is added by the caller). */
+    suspend fun unsyncedCount(): Int = txns.dirtyCount() + rules.dirtyCount()
+
+    /** First sign-in on a phone that already has data: every row is uploaded to the new account. */
+    suspend fun markAllDirty() {
+        txns.markAllDirty()
+        rules.markAllDirty()
+    }
+
+    /** Removes everything stored on this phone (used on sign out / account switch). */
+    suspend fun wipeLocal() = withContext(Dispatchers.IO) { db.clearAllTables() }
 }

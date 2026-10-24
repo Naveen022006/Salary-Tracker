@@ -1,5 +1,6 @@
 package com.local.salarytracker.data
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -7,6 +8,7 @@ import com.local.salarytracker.model.Category
 import com.local.salarytracker.model.TxnSource
 import com.local.salarytracker.model.TxnType
 import com.local.salarytracker.parse.DEFAULT_ALLOWED_PACKAGES
+import java.util.UUID
 
 @Entity(
     tableName = "txn",
@@ -14,6 +16,7 @@ import com.local.salarytracker.parse.DEFAULT_ALLOWED_PACKAGES
         Index(value = ["bodyHash"], unique = true),
         Index(value = ["timestamp"]),
         Index(value = ["upiRef"]),
+        Index(value = ["remoteId"], unique = true),
     ],
 )
 data class TxnEntity(
@@ -36,6 +39,14 @@ data class TxnEntity(
     /** Original SMS/notification text, kept on device so the user can see why it was captured. */
     val rawText: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
+    /** Id of this row in the cloud (client generated UUID). Never changes. */
+    @ColumnInfo(defaultValue = "''") val remoteId: String = UUID.randomUUID().toString(),
+    /** Last local change, epoch millis (phone clock). */
+    @ColumnInfo(defaultValue = "0") val updatedAt: Long = System.currentTimeMillis(),
+    /** Soft delete: hidden everywhere, purged after the delete has been uploaded. */
+    @ColumnInfo(defaultValue = "0") val deleted: Boolean = false,
+    /** True while the row has changes that are not uploaded yet. */
+    @ColumnInfo(defaultValue = "1") val dirty: Boolean = true,
 )
 
 @Entity(tableName = "category_rule")
@@ -43,6 +54,9 @@ data class CategoryRuleEntity(
     /** lowercase merchant keyword */
     @PrimaryKey val keyword: String,
     val category: Category,
+    @ColumnInfo(defaultValue = "0") val updatedAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(defaultValue = "0") val deleted: Boolean = false,
+    @ColumnInfo(defaultValue = "1") val dirty: Boolean = true,
 )
 
 /** Single-row settings table (id is always 0). */

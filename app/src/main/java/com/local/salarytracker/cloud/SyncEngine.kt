@@ -78,6 +78,7 @@ object SyncEngine {
     /**
      * [bypassThrottle] is for sign-in and sign-out where the caller needs the result now.
      */
+    @OptIn(kotlin.time.ExperimentalTime::class) // Session.expiresAt is a kotlin.time.Instant
     suspend fun sync(ctx: Context, bypassThrottle: Boolean = false): SyncResult {
         val app = ctx.applicationContext
         if (!CloudConfig.isConfigured) return SyncResult.NotSignedIn
@@ -85,6 +86,19 @@ object SyncEngine {
         client.auth.awaitInitialization()
         val user = client.auth.currentUserOrNull()?.id ?: return SyncResult.NotSignedIn
         if (Prefs.ownerUserId(app) != user) return SyncResult.NotSignedIn
+        // A session restored after the phone was idle can hold an expired access token; requests would then go out
+        // without the user's token and the server (correctly) refuses them. Refresh first when it is about to expire.
+        val session = client.auth.currentSessionOrNull() ?: return SyncResult.NotSignedIn
+        if (session.expiresAt.epochSeconds - System.currentTimeMillis() / 1000 < 60) {
+            try {
+                client.auth.refreshCurrentSession()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                Log.w(TAG, "token refresh failed: ${t.javaClass.simpleName}")
+                return classify(t).also { if (it is SyncResult.Offline) SyncStatus.set(SyncUi.Problem("No internet — will sync later")) }
+            }
+        }
 
         val now = System.currentTimeMillis()
         if (now < blockedUntil) {

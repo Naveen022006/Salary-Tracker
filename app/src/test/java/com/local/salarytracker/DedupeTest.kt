@@ -55,3 +55,19 @@ class DedupeTest {
         assertNotEquals(a, Dedupe.bodyHash(TxnSource.SMS, "VM-HDFCBK", "Sent Rs.250 To X", t0 + 2 * 86_400_000L))
     }
 }
+
+/** The listener re-reads notifications already in the bar on every connect: they must hash the same. */
+class RepeatedNotificationHashTest {
+    private val t = 1_700_000_000_000L
+
+    @Test fun samePostTimeAndTextGiveSameHash() {
+        val a = Dedupe.bodyHash(TxnSource.NOTIFICATION, "com.phonepe.app", "Paid ₹250 to Swiggy", t)
+        val b = Dedupe.bodyHash(TxnSource.NOTIFICATION, "com.phonepe.app", "Paid  ₹250 to Swiggy ", t)
+        assertEquals(a, b)
+    }
+
+    @Test fun repeatedConnectIsDuplicateByKey() {
+        val k = TxnKey(25000, TxnType.DEBIT, t, null, TxnSource.NOTIFICATION)
+        assertTrue(Dedupe.isDuplicate(k, k.copy()))
+    }
+}

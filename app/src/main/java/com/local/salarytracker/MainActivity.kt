@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         vm.refreshDate()
         vm.catchUp()
+        vm.syncIfStale()
     }
 
     private fun handleIntent(i: Intent?) {

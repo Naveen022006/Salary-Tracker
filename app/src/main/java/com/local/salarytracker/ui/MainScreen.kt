@@ -46,17 +46,56 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.local.salarytracker.Prefs
+import com.local.salarytracker.cloud.AccountStage
+import com.local.salarytracker.cloud.Cloud
+import com.local.salarytracker.cloud.CloudConfig
 import com.local.salarytracker.ui.components.ScreenScaffold
+import androidx.compose.ui.platform.LocalContext
+import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.status.SessionStatus
 import java.time.LocalTime
 
 @Composable
 fun AppRoot(vm: AppViewModel) {
-    val settings = vm.settings.collectAsStateWithLifecycle().value
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        if (!CloudConfig.isConfigured) {
+            // Cloud keys missing in this build: the login screen explains it and cannot be passed.
+            LoginScreen(vm)
+            return@Surface
+        }
+        val status = Cloud.client.auth.sessionStatus.collectAsStateWithLifecycle().value
+        // A failed token refresh (usually no internet) keeps the user in when this phone already belongs to them.
+        val userId: String? = when (status) {
+            is SessionStatus.Authenticated -> status.session.user?.id
+            is SessionStatus.RefreshFailure -> Prefs.ownerUserId(LocalContext.current).takeIf { it.isNotEmpty() }
+            else -> null
+        }
         when {
-            settings == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            !settings.onboardingDone -> OnboardingScreen(vm, settings)
-            else -> MainScreen(vm)
+            status is SessionStatus.Initializing -> AccountLoading("")
+            userId == null -> LoginScreen(vm)
+            else -> SignedInRoot(vm, userId)
+        }
+    }
+}
+
+@Composable
+private fun SignedInRoot(vm: AppViewModel, userId: String) {
+    LaunchedEffect(userId) { vm.account.begin(userId) }
+    when (val stage = vm.account.stage.collectAsStateWithLifecycle().value) {
+        AccountStage.Checking -> AccountLoading("Loading your data...")
+        AccountStage.ConfirmWipe -> {
+            AccountLoading("")
+            WipeConfirmDialog(onRemove = { vm.account.confirmWipe() }, onSignOut = { vm.account.signOutKeepData() })
+        }
+        is AccountStage.LoadError -> AccountLoadError(stage.text, onRetry = { vm.account.retry() }, onSignOut = { vm.account.signOutKeepData() })
+        AccountStage.Ready -> {
+            val settings = vm.settings.collectAsStateWithLifecycle().value
+            when {
+                settings == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                !settings.onboardingDone -> OnboardingScreen(vm, settings)
+                else -> MainScreen(vm)
+            }
         }
     }
 }
@@ -90,6 +129,10 @@ private fun MainScreen(vm: AppViewModel) {
             }
             if (result == SnackbarResult.ActionPerformed) m.onAction?.invoke()
         }
+    }
+    // One-time note when an existing phone's data was linked to the account.
+    LaunchedEffect(Unit) {
+        if (vm.consumeAdoptNote()) vm.messages.tryEmit(UiMessage("Your existing data will be saved to your account"))
     }
     val todayList = rememberLazyListState()
     val fabExpanded = todayList.isScrollingUpOrAtTop()

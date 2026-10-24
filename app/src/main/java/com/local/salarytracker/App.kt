@@ -41,8 +41,10 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AppDatabase.get(this) // also remembers the app context used by the sync hooks
         Notifier.createChannels(this)
         ReminderScheduler.sync(this, replace = false)
         mergeCatalogIntoWatchList()
+        com.local.salarytracker.cloud.SyncScheduler.ensurePeriodic(this)
     }
 }

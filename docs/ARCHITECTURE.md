@@ -347,11 +347,12 @@ Design: `docs/DESIGN_GLASS.md`. No logic, data or text changes.
 
 ## Opening animation (splash)
 
-`core-splashscreen` 1.0.1; theme `Theme.SalaryTracker.Starting` (blue `#FF007AFF`, 600 ms, `postSplashScreenTheme`
-= the real theme) is the activity theme. API 31+ shows the `avd_splash_ring` animation (`values-v31`); older
-devices show `ic_splash_static`. `MainActivity` calls `installSplashScreen()` before `super.onCreate()`; the splash
-stays until `AppViewModel.isFirstScreenReady` (settings loaded and sign-in state known) with a 600 ms hard cap.
-The exit listener fades splash + icon (icon scales to 1.08) over 220 ms and sets `splashExiting`, which drives the
-Compose content entrance (alpha 0 to 1, 12 dp rise, 280 ms). With animations off (`ANIMATOR_DURATION_SCALE` 0) the
-splash is removed at once and the content is shown instantly. If the icon view is null only the splash view fades.
+`core-splashscreen` 1.0.1; theme `Theme.SalaryTracker.Starting` (blue `#FF007AFF`, `postSplashScreenTheme` = the real
+theme) is the activity theme and shows the static icon (`avd_splash_ring`, now a plain vector; `ic_splash_static`
+below API 31). `MainActivity` calls `installSplashScreen()` before `super.onCreate()`; the splash stays until
+`AppViewModel.isFirstScreenReady` with a 1.5 s hard cap. On a cold start with motion on (not from a notification
+intent) `AppViewModel.showIntro` is set and the exit listener removes the splash at once while `ui/IntroOverlay`
+(same blue, 288 dp icon, drawn on top of the already composed content) spins the ring 720 degrees in 900 ms, then
+fades out over 280 ms setting `splashExiting`, which drives the content entrance (alpha 0 to 1, 12 dp rise, 280 ms).
+Without the intro the old 220 ms splash fade runs; with animations off the splash is removed at once.
 Notification intents are handled in `handleIntent` independent of the splash. Spec: `docs/SPLASH_ANIMATION.md`.

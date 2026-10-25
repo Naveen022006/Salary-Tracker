@@ -1,119 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Salary Tracker splash icon - "Allowance Ring" opening animation.
-     For Theme.SplashScreen / android:windowSplashScreenAnimatedIcon (Android 12+; the compat
-     library shows frame 0 statically on older devices). Geometry is the launcher foreground
-     (ic_launcher_foreground.xml) 1:1 on the same 108dp canvas: ring r = 28, stroke 6, so the
-     outer edge sits 31dp from the centre - inside the 36dp circle (2/3 of 108) the splash mask
-     keeps. No group scaling is needed.
-
-     Timeline (600 ms total, nothing runs past 600 ms):
-       0 - 600 ms  arc trimPathEnd 0 -> 1, fast_out_slow_in (the allowance "fills")
-     250 - 600 ms  rupee strokeAlpha 0 -> 1 (decelerate) and scale 0.80 -> 1.00 with a slight
-                   overshoot (tension 1.3) around the glyph centre (54, 54)
-     Only AVD-supported properties are used: trimPathEnd, strokeAlpha, scaleX/scaleY.
-     The rupee is one path with four sub-paths (same strokes as the launcher's four paths) so the
-     fade is a single alpha paint and the overlapping joints never double-blend while fading. -->
-<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt">
-
-    <aapt:attr name="android:drawable">
-        <vector
-            android:width="108dp"
-            android:height="108dp"
-            android:viewportWidth="108"
-            android:viewportHeight="108">
-
-            <!-- ring track: static -->
-            <path
-                android:pathData="M54,26 A28,28 0 1 1 54,82 A28,28 0 1 1 54,26"
-                android:strokeColor="#FFFFFF"
-                android:strokeAlpha="0.28"
-                android:strokeWidth="6" />
-
-            <!-- 80 % progress arc, clockwise from 12 o'clock; draws itself via trimPathEnd -->
-            <path
-                android:name="arc"
-                android:pathData="M54,26 A28,28 0 1 1 27.37,45.35"
-                android:strokeColor="#FFFFFF"
-                android:strokeWidth="6"
-                android:strokeLineCap="round"
-                android:trimPathStart="0"
-                android:trimPathEnd="0" />
-
-            <!-- rupee glyph: scales in around its centre -->
-            <group
-                android:name="rupee_scale"
-                android:pivotX="54"
-                android:pivotY="54"
-                android:scaleX="0.8"
-                android:scaleY="0.8">
-                <path
-                    android:name="rupee"
-                    android:pathData="M45,39 H63 M45,47 H63 M45,39 H53 C61,39 61,55 53,55 H45 M48,55 L62,69"
-                    android:strokeColor="#FFFFFF"
-                    android:strokeWidth="5"
-                    android:strokeLineCap="round"
-                    android:strokeLineJoin="round"
-                    android:strokeAlpha="0" />
-            </group>
-        </vector>
-    </aapt:attr>
-
-    <!-- arc draws itself, ease-out -->
-    <target android:name="arc">
-        <aapt:attr name="android:animation">
-            <objectAnimator
-                android:propertyName="trimPathEnd"
-                android:valueFrom="0"
-                android:valueTo="1"
-                android:valueType="floatType"
-                android:duration="600"
-                android:startOffset="0"
-                android:interpolator="@android:interpolator/fast_out_slow_in" />
-        </aapt:attr>
-    </target>
-
-    <!-- rupee fades in -->
-    <target android:name="rupee">
-        <aapt:attr name="android:animation">
-            <objectAnimator
-                android:propertyName="strokeAlpha"
-                android:valueFrom="0"
-                android:valueTo="1"
-                android:valueType="floatType"
-                android:duration="350"
-                android:startOffset="250"
-                android:interpolator="@android:interpolator/decelerate_cubic" />
-        </aapt:attr>
-    </target>
-
-    <!-- rupee scales 0.8 -> 1.0 with a slight overshoot -->
-    <target android:name="rupee_scale">
-        <aapt:attr name="android:animation">
-            <set>
-                <objectAnimator
-                    android:propertyName="scaleX"
-                    android:valueFrom="0.8"
-                    android:valueTo="1"
-                    android:valueType="floatType"
-                    android:duration="350"
-                    android:startOffset="250">
-                    <aapt:attr name="android:interpolator">
-                        <overshootInterpolator android:tension="1.3" />
-                    </aapt:attr>
-                </objectAnimator>
-                <objectAnimator
-                    android:propertyName="scaleY"
-                    android:valueFrom="0.8"
-                    android:valueTo="1"
-                    android:valueType="floatType"
-                    android:duration="350"
-                    android:startOffset="250">
-                    <aapt:attr name="android:interpolator">
-                        <overshootInterpolator android:tension="1.3" />
-                    </aapt:attr>
-                </objectAnimator>
-            </set>
-        </aapt:attr>
-    </target>
-</animated-vector>
+<!-- System splash icon (Android 12+): the complete, static launcher mark (1:1 with
+     ic_launcher_foreground.xml). The spin is drawn by the in-app IntroOverlay, because the platform
+     stops animating the splash icon once the app has drawn its first frame. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M54,26 A28,28 0 1 1 54,82 A28,28 0 1 1 54,26"
+        android:strokeColor="#FFFFFF"
+        android:strokeAlpha="0.28"
+        android:strokeWidth="6" />
+    <path
+        android:pathData="M54,26 A28,28 0 1 1 27.37,45.35"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M45,39 H63 M45,47 H63 M45,39 H53 C61,39 61,55 53,55 H45 M48,55 L62,69"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

@@ -129,6 +129,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Set by MainActivity when the splash starts leaving; drives the content entrance animation. */
     val splashExiting = MutableStateFlow(false)
 
+    /** Opening intro overlay is composed (cold start, motion on, not from a notification). Survives rotation. */
+    val showIntro = MutableStateFlow(false)
+
+    /** The system splash has been handed over; the intro may start spinning. */
+    val introStarted = MutableStateFlow(false)
+
     init {
         viewModelScope.launch {
             val sessionKnown = if (com.local.salarytracker.cloud.CloudConfig.isConfigured) {

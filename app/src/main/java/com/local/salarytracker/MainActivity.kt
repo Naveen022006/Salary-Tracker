@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.local.salarytracker.model.ThemeMode
 import com.local.salarytracker.ui.AppRoot
 import com.local.salarytracker.ui.AppViewModel
+import com.local.salarytracker.ui.IntroOverlay
 import com.local.salarytracker.ui.theme.SalaryTrackerTheme
 
 class MainActivity : ComponentActivity() {
@@ -47,12 +48,22 @@ class MainActivity : ComponentActivity() {
         val splash = installSplashScreen()
         val motion = motionEnabled()
         val t0 = SystemClock.uptimeMillis()
+        val fromNotification = intent?.let {
+            it.getBooleanExtra(Extras.OPEN_ADD_CASH, false) || it.getBooleanExtra(Extras.OPEN_REPORT, false) ||
+                it.getBooleanExtra(Extras.OPEN_ASK, false) ||
+                !it.getStringExtra(Extras.LOAN_PERSON_ID).isNullOrEmpty() || it.getLongExtra(Extras.TXN_ID, -1L) > 0
+        } == true
+        if (savedInstanceState == null && motion && !fromNotification) vm.showIntro.value = true
         splash.setKeepOnScreenCondition {
-            // Hard cap so start is never held up (600 ms with motion; 1.5 s safety cap when animations are off,
-            // so a sign-in state that never resolves can't leave the splash up forever).
-            !vm.isFirstScreenReady.value && SystemClock.uptimeMillis() - t0 < (if (motion) 600L else 1500L)
+            !vm.isFirstScreenReady.value && SystemClock.uptimeMillis() - t0 < SPLASH_CAP_MS
         }
-        splash.setOnExitAnimationListener { provider -> exitSplash(provider, motion) }
+        splash.setOnExitAnimationListener { provider ->
+            if (vm.showIntro.value) {
+                // The overlay underneath looks identical to the system splash, so the hand-off is invisible.
+                provider.remove()
+                vm.introStarted.value = true
+            } else exitSplash(provider, motion)
+        }
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         // Registered here (not in composition) so the contact-picker result is delivered even if the screen was rebuilt meanwhile.
@@ -89,11 +100,37 @@ class MainActivity : ComponentActivity() {
                 label = "contentEntrance",
             )
             val rise = with(LocalDensity.current) { 12.dp.toPx() }
+            val showIntro by vm.showIntro.collectAsStateWithLifecycle()
+            val introStarted by vm.introStarted.collectAsStateWithLifecycle()
+            if (showIntro) {
+                // White status / navigation bar icons over the blue overlay.
+                DisposableEffect(Unit) {
+                    enableEdgeToEdge(
+                        statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+                        navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+                    )
+                    onDispose {
+                        enableEdgeToEdge(
+                            statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
+                            navigationBarStyle = SystemBarStyle.auto(LIGHT_SCRIM, DARK_SCRIM) { dark },
+                        )
+                    }
+                }
+            }
             SalaryTrackerTheme(darkTheme = dark) {
-                Box(Modifier.graphicsLayer {
-                    alpha = progress
-                    translationY = (1f - progress) * rise
-                }) { AppRoot(vm) }
+                Box {
+                    Box(Modifier.graphicsLayer {
+                        alpha = progress
+                        translationY = (1f - progress) * rise
+                    }) { AppRoot(vm) }
+                    if (showIntro) {
+                        IntroOverlay(
+                            started = introStarted,
+                            onExitStart = { vm.splashExiting.value = true },
+                            onDone = { vm.showIntro.value = false },
+                        )
+                    }
+                }
             }
         }
     }
@@ -185,5 +222,8 @@ class MainActivity : ComponentActivity() {
     private companion object {
         val LIGHT_SCRIM = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
         val DARK_SCRIM = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
+
+        /** Never hold the splash longer than this while waiting for the first screen's data. */
+        const val SPLASH_CAP_MS = 1500L
     }
 }

@@ -113,3 +113,27 @@ light and dark system theme (background identical, Today page tone differs after
 out (Login appears, same entrance); Android 12 and 13+ (icon morph from the launcher); an API 26-29
 emulator (static icon, same exit); `TotalTime` must not grow by more than ~50 ms versus a build with
 the splash theme removed, since the splash never waits beyond the 600 ms cap.
+
+## 6. In-app intro: why and how
+
+Measured on a Samsung (Android 16): the platform animates the splash icon only while the system draws the
+starting window. Once the app has drawn its first frame (~300 ms) the splash is handed to the app and the
+icon is static, so an AVD spin never shows. The spin is therefore drawn by the app.
+
+- `ui/IntroOverlay.kt` is a full-screen Box (`#FF007AFF`) on top of the already-composed app content, so
+  data loads in parallel. Two stacked `Image`s (`intro_ring.xml`, `intro_rupee.xml`, geometry copied from
+  `ic_launcher_foreground.xml`): the ring rotates 0 -> 720 degrees in 900 ms
+  (`CubicBezierEasing(0.65, 0, 0.35, 1)`), the rupee stays still. Then 280 ms exit: overlay alpha 1 -> 0 and
+  icon scale 1.0 -> 1.08 while the content entrance (alpha + 12 dp rise) runs; then `onDone`.
+- **288 dp alignment rule:** each Image is exactly 288 dp x 288 dp. The Android 12 splash icon (no icon
+  background colour, none is set in the themes) is a 288 dp canvas for the 108 unit icon, so the overlay
+  lines up pixel for pixel with the system splash and the hand-off (`provider.remove()` with no animation)
+  is invisible. Do not add `windowSplashScreenIconBackgroundColor` (that would change it to 240 dp).
+  The overlay ignores system bar insets and centres on the whole window like the splash.
+- Shown only on a real cold start: `savedInstanceState == null`, motion enabled, and not launched from a
+  notification intent (add cash, report, assistant, loan person, entry). The flag lives in
+  `AppViewModel.showIntro`, so rotation never replays it. The spin starts when the splash exit listener
+  sets `introStarted`. Otherwise the old exit animation path (or instant removal with reduced motion) runs.
+- The splash is held only until `isFirstScreenReady` (cap 1.5 s); there is no fixed 900 ms hold.
+  `avd_splash_ring.xml` is now just the static full icon; `windowSplashScreenAnimationDuration` is 300.
+- The overlay is hidden from TalkBack (`clearAndSetSemantics {}`) and has no click handling.

@@ -137,3 +137,19 @@ icon is static, so an AVD spin never shows. The spin is therefore drawn by the a
 - The splash is held only until `isFirstScreenReady` (cap 1.5 s); there is no fixed 900 ms hold.
   `avd_splash_ring.xml` is now just the static full icon; `windowSplashScreenAnimationDuration` is 300.
 - The overlay is hidden from TalkBack (`clearAndSetSemantics {}`) and has no click handling.
+
+## 7. The chosen animation
+
+The user picked **ZOOM** on 26 Oct 2026 after comparing all three on the phone, so `IntroOverlay` now has a
+single body and the temporary `IntroStyle` enum, `Prefs.introStyle` and the `TEST_INTRO` adb switch are gone.
+
+| Motion | Exit | Total |
+|---|---|---|
+| whole icon springs 0.55 -> 1 (medium bouncy, low stiffness), alpha 0 -> 1 in 200 ms, ring turns 360 deg in 700 ms; 120 ms hold | icon scale 1 -> 1.8 and alpha 1 -> 0, 320 ms | ~1.1 s |
+
+The two rejected styles, for reference if they are ever wanted back:
+
+- **SPIN** - ring rotates 0 -> 720 deg over 900 ms, `CubicBezier(0.65, 0, 0.35, 1)`, rupee still; exit alpha
+  1 -> 0 and scale 1 -> 1.08 over 280 ms (~1.18 s). This was the first version, committed in `4f834bb`.
+- **DRAW** - a `Canvas` arc (288 deg, from 12 o'clock) draws clockwise in 800 ms (FastOutSlowIn) over a faint
+  track while the rupee fades 0 -> 1 and scales 0.8 -> 1.0 with overshoot, 400 ms from 250 ms; same exit (~1.08 s).

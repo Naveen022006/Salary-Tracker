@@ -62,3 +62,5 @@ enum class LoanMethod(val label: String) {
         fun fromName(name: String?): LoanMethod = entries.firstOrNull { it.name == name } ?: OTHER
     }
 }
+
+/** Opening intro animation (see ui/IntroOverlay.kt). Temporary: kept only until one style is chosen. */

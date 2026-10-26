@@ -28,8 +28,8 @@ android {
         applicationId = "com.local.salarytracker"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.6"
+        versionCode = 8
+        versionName = "1.7"
         buildConfigField("String", "SUPABASE_URL", cloudField("SUPABASE_URL"))
         buildConfigField("String", "SUPABASE_ANON_KEY", cloudField("SUPABASE_ANON_KEY"))
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", cloudField("GOOGLE_WEB_CLIENT_ID"))

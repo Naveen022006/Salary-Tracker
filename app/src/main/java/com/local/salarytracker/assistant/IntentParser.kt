@@ -24,6 +24,14 @@ enum class Intent {
     CHECK_IN_MONTH,
     /** Budget of the next pay month ("how much can I spend next month?"). */
     NEXT_MONTH,
+    /** "I spent 200 on tea" - prepares a new expense to confirm. */
+    ADD_EXPENSE,
+    /** "What was my biggest expense?", "Which day did I spend the most?" */
+    BIGGEST,
+    /** "How does the daily budget work?" */
+    HOW_IT_WORKS,
+    GREETING,
+    BYE,
     HELP,
     THANKS,
     UNKNOWN,
@@ -41,6 +49,8 @@ data class ParsedQuestion(
     val amountPaise: Long? = null,
     /** Lower-case words of the question (the engine looks for people's names in them). */
     val words: List<String> = emptyList(),
+    /** For [Intent.ADD_EXPENSE]: what the money was spent on ("tea"), when the sentence says it. */
+    val what: String? = null,
 )
 
 /** Plain keyword matching. Pure Kotlin, no Android imports. */
@@ -85,11 +95,30 @@ object IntentParser {
         val amount = findAmount(text)
         fun q(intent: Intent, cat: Category? = category, r: TimeRange? = range) = ParsedQuestion(intent, cat, r, amount, words)
 
+        // Reminders are not something the rules can do (and "remind me to pay rent" is not a question about rent).
+        if (has("remind", "reminder", "reminders")) return q(Intent.UNKNOWN)
+
         // Limits first: "keep food under 6000", "set a limit of 3k for shopping", "remove food limit".
         val limitWord = has("limit", "limits", "cap", "keep", "under", "below", "max", "maximum")
         if (has("limit", "limits", "cap") && has("remove", "delete", "clear", "stop", "cancel", "no")) return q(Intent.REMOVE_LIMIT)
         if (limitWord && category != null && amount != null) return q(Intent.SET_LIMIT)
         if (has("limit", "limits")) return if (category != null) q(Intent.SET_LIMIT) else q(Intent.SHOW_LIMITS)
+
+        // "I spent 200 on tea", "paid 1200 rent", "add 50 for parking": a new expense, not a question.
+        val question = has("how much", "how many", "did i", "do i", "can i", "should i", "could i", "will i", "what", "why", "when", "which", "where", "is it", "am i") ||
+            raw.trim().endsWith("?")
+        if (amount != null && !question && !has("limit", "goal", "salary") &&
+            (words.first() in ADD_STARTS || has("i spent", "i paid", "i bought", "i gave", "spent on", "paid for"))
+        ) return q(Intent.ADD_EXPENSE).copy(what = findWhat(text))
+
+        if (has("good morning", "good afternoon", "good evening")) return q(Intent.GREETING)
+        if (has("bye", "goodbye", "good night", "see you", "see ya", "talk later")) return q(Intent.BYE)
+        if (has("how does", "how do", "explain", "what is", "what does", "meaning of") &&
+            has("budget", "daily budget", "allowance", "roll over", "rollover", "carry", "app work", "this app", "work", "works")
+        ) return q(Intent.HOW_IT_WORKS)
+        if (has("biggest", "largest", "highest", "most expensive", "top expenses", "top spends", "big expenses") ||
+            (has("which day", "what day") && has("most", "highest", "maximum"))
+        ) return q(Intent.BIGGEST, r = range ?: TimeRange(RangeKind.THIS_MONTH))
 
         if (has(
                 "owe", "owes", "owed", "lend", "lent", "lending", "borrow", "borrowed", "loan", "loans", "give back", "pay back",
@@ -146,6 +175,22 @@ object IntentParser {
         if (has("thanks", "thank you", "thank", "thx", "ok", "okay", "great", "nice", "cool")) return q(Intent.THANKS)
         if (has("help", "hi", "hello", "hey", "what can you do", "menu", "start")) return q(Intent.HELP)
         return q(Intent.UNKNOWN)
+    }
+
+    private val ADD_STARTS = setOf("spent", "paid", "bought", "add", "added", "spend", "gave")
+    private val WHAT_STOP = setOf("today", "yesterday", "now", "in", "cash", "by", "using", "with", "this", "morning", "evening", "night", "at", "rs", "rupees")
+
+    /** The thing bought, from "... on tea", "... for auto to office", "... at the market" (null when not said). */
+    internal fun findWhat(text: String): String? {
+        val m = Regex("""(?:^| )(?:on|for|at) (.+)$""").find(text) ?: return null
+        val words = m.groupValues[1].split(' ').filter { it.isNotEmpty() && it != "the" && it != "a" && it != "my" }
+        val out = ArrayList<String>()
+        for (w in words) {
+            if (w in WHAT_STOP || w.any { it.isDigit() } || w == "₹") break
+            out += w
+            if (out.size == 4) break
+        }
+        return out.joinToString(" ").takeIf { it.isNotEmpty() }?.replaceFirstChar { it.uppercase() }
     }
 
     /** Lower case, "₹" kept, other punctuation turned into spaces (except . and , inside numbers). */

@@ -1,5 +1,6 @@
 package com.local.salarytracker.ui
 
+import androidx.compose.material.icons.outlined.Delete
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.ui.semantics.contentDescription
@@ -234,9 +235,10 @@ private fun AssistantChat(vm: AssistantViewModel, appVm: AppViewModel, pad: Padd
                     m.text, m.reply, m.source, vm, appVm, fixed,
                     aiLeft = if (m.source == AssistantStore.SOURCE_AI) aiLeft else -1,
                     onLongPress = { copy(m.text) },
+                    messageId = m.id,
                 )
             }
-            if (thinking) item("thinking") { ThinkingBubble() }
+            if (thinking) item("thinking") { ThinkingBubble(vm.progress.collectAsStateWithLifecycle().value) }
         }
         // Jump to the newest message when scrolled up.
         androidx.compose.animation.AnimatedVisibility(
@@ -308,6 +310,7 @@ private fun BotBubble(
     showChips: Boolean = false,
     aiLeft: Int = -1,
     onLongPress: () -> Unit = {},
+    messageId: Long = 0L,
 ) {
     Row(
         Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = onLongPress, onLongClickLabel = "Copy", indication = null,
@@ -326,7 +329,7 @@ private fun BotBubble(
             if (items.isNotEmpty()) {
                 Spacer(Modifier.height(10.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items.forEach { ReplyRow(it, vm, appVm, fixed) }
+                    items.forEach { ReplyRow(it, vm, appVm, fixed, messageId) }
                 }
             }
             if (source == AssistantStore.SOURCE_AI) {
@@ -348,8 +351,9 @@ private fun toneColor(t: Tone): Color = when (t) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ReplyRow(item: ReplyItem, vm: AssistantViewModel, appVm: AppViewModel, fixed: Map<Long, Category>) {
+private fun ReplyRow(item: ReplyItem, vm: AssistantViewModel, appVm: AppViewModel, fixed: Map<Long, Category>, messageId: Long) {
     when (item) {
+        is ReplyItem.Proposal -> ProposalCard(item, onConfirm = { vm.confirm(messageId, item, appVm) }, onCancel = { vm.cancel(messageId, item) })
         is ReplyItem.Stat -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(item.label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
             Spacer(Modifier.size(8.dp))
@@ -435,7 +439,7 @@ private fun FixRow(item: ReplyItem.EntryFix, done: Category?, onPick: (Category)
 }
 
 @Composable
-private fun ThinkingBubble() {
+private fun ThinkingBubble(progress: String?) {
     val t = rememberInfiniteTransition(label = "dots")
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         BotMark()
@@ -447,7 +451,39 @@ private fun ThinkingBubble() {
                 }
             }
         }
-        Text("Thinking…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(progress ?: "Thinking…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** A change the assistant prepared: nothing happens until Confirm. Shows the result after a tap. */
+@Composable
+private fun ProposalCard(p: ReplyItem.Proposal, onConfirm: () -> Unit, onCancel: () -> Unit) {
+    val c = AppColors.current
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = c.accent.copy(alpha = if (c.isDark) 0.16f else 0.08f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, c.accent.copy(alpha = 0.35f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(p.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = c.label)
+            p.lines.forEach { Text(it, style = MaterialTheme.typography.bodyMedium, color = c.secondaryLabel) }
+            when (p.state) {
+                com.local.salarytracker.assistant.ProposalState.PENDING -> Row(
+                    Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    com.local.salarytracker.ui.components.CapsuleButton("Confirm", onClick = onConfirm, small = true, modifier = Modifier.weight(1f))
+                    com.local.salarytracker.ui.components.CapsuleButton(
+                        "Cancel", onClick = onCancel, small = true, style = com.local.salarytracker.ui.components.ButtonStyle.Tinted,
+                        color = c.secondaryLabel, modifier = Modifier.weight(1f),
+                    )
+                }
+                com.local.salarytracker.assistant.ProposalState.DONE -> Text("Done", style = MaterialTheme.typography.labelLarge, color = c.positive)
+                com.local.salarytracker.assistant.ProposalState.CANCELLED -> Text("Cancelled", style = MaterialTheme.typography.labelLarge, color = c.secondaryLabel)
+                com.local.salarytracker.assistant.ProposalState.FAILED -> Text("Could not do this", style = MaterialTheme.typography.labelLarge, color = c.danger)
+            }
+        }
     }
 }
 
@@ -549,8 +585,8 @@ fun AssistantSettingsSheet(vm: AssistantViewModel) {
             Text("Ask settings", style = MaterialTheme.typography.titleLarge)
             SectionCard(contentPadding = PaddingValues(vertical = 4.dp)) {
                 SettingRow(
-                    Icons.Filled.AutoAwesome, "AI answers",
-                    value = if (aiOn) "On · Claude AI answers questions the app can't" + (if (aiLeft >= 0) " · $aiLeft left today" else "") else "Off · only answers made on your phone",
+                    Icons.Filled.AutoAwesome, "AI assistant",
+                    value = if (aiOn) "On · answers your typed questions and can prepare changes" + (if (aiLeft >= 0) " · $aiLeft left today" else "") else "Off · only answers made on your phone",
                     onClick = { vm.setAiEnabled(!aiOn) },
                     trailing = { Switch(colors = appleSwitchColors(), checked = aiOn, onCheckedChange = { vm.setAiEnabled(it) }) },
                 )
@@ -581,11 +617,31 @@ fun AssistantSettingsSheet(vm: AssistantViewModel) {
                 }
                 SettingRow(Icons.Outlined.Savings, "Add a limit", onClick = { vm.limitRequest.value = LimitRequest(null, null) })
             }
+            val notes = vm.notes.collectAsStateWithLifecycle().value
+            Text("What Ask remembers", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            SectionCard(contentPadding = PaddingValues(vertical = 4.dp)) {
+                if (notes.isEmpty()) {
+                    Text(
+                        "Nothing yet. Tell Ask things like \"I am saving for a bike\" and it will remember them for later answers.",
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+                notes.forEachIndexed { i, n ->
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(n, modifier = Modifier.weight(1f).padding(vertical = 10.dp), style = MaterialTheme.typography.bodyMedium)
+                        IconButton(onClick = { vm.forgetNote(i) }) {
+                            Icon(Icons.Outlined.Delete, contentDescription = "Forget this", tint = AppColors.current.danger)
+                        }
+                    }
+                }
+                if (notes.size > 1) TextButton(onClick = { vm.forgetAllNotes() }, modifier = Modifier.padding(start = 4.dp)) { Text("Forget everything") }
+            }
             InfoBanner(
                 Icons.Outlined.Lock,
-                "Privacy: answers are made on your phone. Only with AI answers on, a question the app can't answer is sent with a summary of totals " +
-                    "(like \"Food ₹4,200\") to Claude AI through your own cloud account. Names of people, phone numbers, SMS text and shop names " +
-                    "(except big brands like Swiggy) never leave your phone. Your chat is kept only on this phone.",
+                "Privacy: the quick questions are answered on your phone. With the AI assistant on, your typed questions go to Claude AI " +
+                    "through your own cloud account with a summary of your budget and the entries it looks up. SMS text, phone numbers and " +
+                    "UPI ids never leave your phone, and names of people are replaced by codes. Your chat and notes stay on this phone.",
             )
         }
     }
@@ -630,14 +686,15 @@ private fun LimitDialog(vm: AssistantViewModel, req: LimitRequest) {
 private fun ConsentDialog(vm: AssistantViewModel) {
     val preview = vm.consentPreview.collectAsStateWithLifecycle().value
     AlertDialog(
-        onDismissRequest = { vm.consentOpen.value = false },
+        onDismissRequest = { vm.declineConsent() },
         icon = { Icon(Icons.Filled.AutoAwesome, contentDescription = null) },
-        title = { Text("Turn on AI answers?") },
+        title = { Text("Turn on the AI assistant?") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Most questions are answered on your phone. When the app can't answer, your question goes to Claude AI (by Anthropic) through your own Supabase account.")
-                Text("Sent: your question and a summary of numbers: salary, budget, totals per category, limits, lending totals, big-brand shop names (like Swiggy).", fontWeight = FontWeight.Medium)
-                Text("Never sent: SMS or notification text, names of people, phone numbers, UPI ids, account numbers, notes, other shop names.", fontWeight = FontWeight.Medium)
+                Text("Ask becomes your own money assistant. Your typed questions go to Claude AI (by Anthropic) through your own Supabase account. The quick questions (chips) stay on your phone.")
+                Text("Sent: your question, a summary of your budget, and the entries it looks up to answer you (date, amount, category, shop name, your note).", fontWeight = FontWeight.Medium)
+                Text("Never sent: SMS or notification text, phone numbers, UPI ids, account numbers. Names of people in Lending are replaced by codes.", fontWeight = FontWeight.Medium)
+                Text("It can prepare changes (add an expense, set a limit ...), but nothing changes until you tap Confirm. It can remember notes you ask it to; you can delete them in Ask settings.")
                 Text("Up to 30 AI questions a day. AI can make mistakes; check important numbers in Report. You can turn this off at any time.")
                 if (preview == null) {
                     TextButton(onClick = { vm.loadConsentPreview() }) { Text("See what is sent") }
@@ -649,7 +706,7 @@ private fun ConsentDialog(vm: AssistantViewModel) {
             }
         },
         confirmButton = { TextButton(onClick = { vm.acceptConsent() }) { Text("Turn on") } },
-        dismissButton = { TextButton(onClick = { vm.consentOpen.value = false }) { Text("Not now") } },
+        dismissButton = { TextButton(onClick = { vm.declineConsent() }) { Text("Not now") } },
     )
 }
 

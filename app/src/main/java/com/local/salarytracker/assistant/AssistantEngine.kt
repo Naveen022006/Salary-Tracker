@@ -29,6 +29,11 @@ object AssistantEngine {
         CHIP_BILLS, CHIP_FIX, CHIP_LENDING, CHIP_LIMITS, CHIP_WEEK, CHIP_LAST_MONTH,
     )
 
+    /** True when [text] is one of the suggestion chips (answered by the rules even when AI is on: instant and free). */
+    fun isChip(text: String): Boolean = text.trim() in CHIP_SET
+
+    private val CHIP_SET by lazy { DEFAULT_CHIPS.toSet() }
+
     private val DAY = DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH)
     private val DM = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
 
@@ -63,6 +68,11 @@ object AssistantEngine {
         Intent.CHECK_IN_WEEK -> Answer(CheckIn.weekly(d))
         Intent.CHECK_IN_MONTH -> Answer(CheckIn.monthly(d, previous = p.range?.kind == RangeKind.LAST_MONTH))
         Intent.NEXT_MONTH -> Answer(nextMonth(d))
+        Intent.ADD_EXPENSE -> Answer(addExpense(d, p))
+        Intent.BIGGEST -> Answer(biggest(d, p.range ?: TimeRange(RangeKind.THIS_MONTH)))
+        Intent.HOW_IT_WORKS -> Answer(howItWorks(d))
+        Intent.GREETING -> Answer(Reply("Hello! ${canSpendToday(d).text} What would you like to know?", chips = DEFAULT_CHIPS.take(6)))
+        Intent.BYE -> Answer(Reply("Bye! Spend wisely. I'm here when you need me.", chips = listOf(CHIP_TODAY)))
         Intent.HELP -> Answer(welcome())
         Intent.THANKS -> Answer(Reply("You're welcome! Ask me anything about your money.", chips = DEFAULT_CHIPS.take(6)))
         Intent.UNKNOWN -> if (aiEnabled) null else Answer(notUnderstood())
@@ -85,6 +95,50 @@ object AssistantEngine {
         out += limitWarnings(d)
         out += Insights.unusual(d).map { unusualWarning(it) }
         return out.take(max)
+    }
+
+    // ------------------------------------------------------------------ add, biggest, how it works
+
+    /** A confirm card for "I spent 200 on tea" (the same card the AI agent makes). */
+    fun addExpense(d: AssistantData, p: ParsedQuestion): Reply {
+        val amount = p.amountPaise ?: return notUnderstood()
+        val custom = d.customCategories.firstOrNull { c -> p.words.joinToString(" ").contains(c.lowercase(Locale.ENGLISH)) }
+        val category = custom ?: (p.category ?: Category.OTHER).displayName
+        val what = p.what ?: custom ?: p.category?.displayName ?: "Cash spending"
+        val day = if (p.range?.kind == RangeKind.YESTERDAY) d.today.minusDays(1) else d.today
+        val out = AgentTools(d, PeopleTokens(emptyList()), mutableListOf()).run(
+            "propose_add_expense",
+            AgentTools.input("amount" to amount / 100.0, "what" to what, "category" to category, "date" to day.toString()),
+        )
+        val card = out.proposal ?: return Reply(out.result, chips = DEFAULT_CHIPS.take(4))
+        return Reply("Shall I add this? Check it and tap Confirm.", listOf(card), listOf(CHIP_TODAY))
+    }
+
+    fun biggest(d: AssistantData, range: TimeRange): Reply {
+        val dates = Insights.dates(range, d)
+        val spend = Insights.spend(d, dates)
+        if (spend.isEmpty()) return Reply("No spending ${dates.label}.", chips = listOf(CHIP_TODAY, CHIP_WHERE))
+        val top = spend.sortedByDescending { it.amountPaise }.take(5)
+        val byDay = spend.groupBy { it.date }.mapValues { e -> e.value.sumOf { it.amountPaise } }.maxByOrNull { it.value }!!
+        val items = ArrayList<ReplyItem>()
+        items += ReplyItem.Stat("Biggest day", "${day(byDay.key)} · ${m(byDay.value)}")
+        top.forEach { t -> items += ReplyItem.Stat("${dm(t.date)} · ${t.merchant?.take(24) ?: t.custom ?: t.category.displayName}", m(t.amountPaise)) }
+        return Reply("Your biggest payment ${dates.label} was ${m(top.first().amountPaise)}.", items, listOf(CHIP_WHERE, CHIP_TIPS))
+    }
+
+    fun howItWorks(d: AssistantData): Reply {
+        val snap = Insights.snapshot(d)
+        return Reply(
+            "Your salary minus your savings goal is your money for the month. The app splits it into a budget for each day. " +
+                "If you spend less today, the extra moves to the next days. If you spend more, the next days get a little less. " +
+                "Bills and rent use the month's money but never count as overspending a day.",
+            listOf(
+                ReplyItem.Stat("Money for this month", m(snap.budgetPaise)),
+                ReplyItem.Stat("Normal daily budget", m(snap.baseDailyPaise)),
+                ReplyItem.Stat("Today's budget", m(snap.todayAllowancePaise)),
+            ),
+            listOf(CHIP_TODAY, CHIP_WHERE),
+        )
     }
 
     // ------------------------------------------------------------------ today

@@ -13,6 +13,8 @@ import com.local.salarytracker.assistant.RangeKind
 import com.local.salarytracker.assistant.Reply
 import com.local.salarytracker.assistant.ReplyItem
 import com.local.salarytracker.assistant.TxnLite
+import com.local.salarytracker.assistant.PeopleTokens
+import com.local.salarytracker.assistant.ProposalKind
 import com.local.salarytracker.assistant.UnusualKind
 import com.local.salarytracker.assistant.Verdict
 import com.local.salarytracker.budget.LoanMath
@@ -275,13 +277,16 @@ class AssistantTest {
     }
 
     @Test fun scrubRemovesNamesNumbersAndIds() {
-        val s = AiContext.scrub("Should Ramesh pay me back? call 98765 43210 or pay ramesh@ybl, a/c 123456789012. Budget 15000", listOf("Ramesh Kumar"))
+        val people = PeopleTokens(listOf("Anu", "Ramesh Kumar"))
+        val s = people.scrub("Should Ramesh pay me back? call 98765 43210 or pay ramesh@ybl, a/c 123456789012. Budget 15000")
         assertFalse(s, s.contains("Ramesh", true))
         assertFalse(s, s.contains("98765"))
         assertFalse(s, s.contains("ybl"))
         assertFalse(s, s.contains("123456789012"))
         assertTrue(s, s.contains("15000"))
-        assertTrue(s, s.contains("a friend"))
+        assertTrue(s, s.contains("[P2]"))
+        assertEquals("Ramesh Kumar owes you", people.restore("[P2] owes you"))
+        assertEquals("a friend owes you", people.restore("[P9] owes you"))
     }
 
     // ------------------------------------------------------------ storage
@@ -292,6 +297,7 @@ class AssistantTest {
             listOf(
                 ReplyItem.Stat("a", "b"), ReplyItem.CategoryLine(Category.FOOD, 100), ReplyItem.Tip("t"),
                 ReplyItem.EntryFix(1, "m", 2, "2026-10-01", Category.FOOD), ReplyItem.Action("x", ActionKind.ASK_AI, "q"),
+                ReplyItem.Proposal("id", ProposalKind.ADD_EXPENSE, "Add", listOf("l"), mapOf("amount" to "100")),
             ),
             listOf("c"),
         )

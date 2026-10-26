@@ -145,6 +145,30 @@ notes, or shop names other than big brands (like Swiggy or Amazon). Names of peo
 with "a friend" even if you type them. Up to 30 AI questions a day. Setup (once): see step I in
 [`docs/SUPABASE_GOOGLE_SETUP.md`](docs/SUPABASE_GOOGLE_SETUP.md). The API key stays in Supabase; it is never in the app.
 
+## Ask becomes your money assistant (version 1.7)
+
+With the AI assistant on (Ask → ⚙), typed questions go to an AI agent that works for you with your own data:
+
+- It **looks things up** instead of guessing: "What did I spend at Swiggy this week?", "Compare this week with last
+  week", "Which day did I spend the most?", "Show my last 5 payments", "How much did I spend on Gym?".
+- It **prepares changes as cards**: "I spent 200 on tea", "Mark my Amazon payment as not spending", "Move these to
+  Gym", "Keep food under ₹6,000", "Set my savings goal to ₹25,000", "Delete that entry". Nothing changes until you
+  tap **Confirm**.
+- It **remembers you**: tell it "I am saving for a bike" or "rent is paid in cash" and it uses that in later answers.
+  See and delete the notes in Ask → ⚙ → **What Ask remembers**.
+- It answers in simple English, or in Hindi / Tamil / your language if you write in it, and adds buttons to the right
+  screen when that helps.
+- While it works you see what it is doing ("Looking at your entries…").
+
+The suggestion chips are still answered on the phone (instant and free), and so is everything when the AI is off or
+there is no internet. The phone-only answers got better too: "I spent 200 on tea" makes a confirm card, and greetings,
+"biggest expense", "which day did I spend most" and "how does the daily budget work" are understood.
+
+**What the AI sees:** your question, a summary of your budget, and only the entries it looks up (date, amount,
+category, shop name, your note). SMS text, phone numbers and UPI ids are never sent; names of people in Lending are
+replaced by codes ([P1]) and put back on your phone. Setup (once): step J in
+[`docs/SUPABASE_GOOGLE_SETUP.md`](docs/SUPABASE_GOOGLE_SETUP.md) (one SQL file and the new `assistant` function).
+
 ## Spending map and the new tab bar (version 1.6)
 
 - The bottom bar now looks and moves like Apple Music: clear glass, and a blue glass lens behind the selected tab that

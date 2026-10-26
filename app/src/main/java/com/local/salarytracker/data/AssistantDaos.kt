@@ -52,6 +52,13 @@ interface AssistantDao {
     @Query("DELETE FROM assistant_message")
     suspend fun clearMessages()
 
+    @Query("SELECT * FROM assistant_message WHERE id = :id")
+    suspend fun message(id: Long): AssistantMessageEntity?
+
+    /** A confirm card changed state (Confirm / Cancel tapped). */
+    @Query("UPDATE assistant_message SET payload = :payload WHERE id = :id")
+    suspend fun updatePayload(id: Long, payload: String)
+
     @Query("SELECT * FROM category_limit ORDER BY category")
     fun observeLimits(): Flow<List<CategoryLimitEntity>>
 

@@ -14,7 +14,8 @@ import java.time.format.TextStyle
 import java.util.Locale
 
 /**
- * The only data the AI ever sees: a summary of numbers. Built on the phone, pure Kotlin.
+ * The money summary the Ask agent gets with every question. Built on the phone, pure Kotlin. Details (entries,
+ * totals) are looked up with the tools in [AgentTools] when a question needs them.
  *
  * Never included: SMS / notification text, people's names, phone numbers, UPI ids or references, account digits,
  * notes, or shop names that are not well-known brands from [PaymentApps] (a payee can be a person).
@@ -160,25 +161,6 @@ object AiContext {
 
     /** Readable form for the "See what is sent" dialog. */
     fun toPretty(o: JsonObject): String = pretty.encodeToString(JsonObject.serializer(), o)
-
-    private val ID = Regex("""\S+@\S+""")
-    private val LONG_NUMBER = Regex("""\+?\d[\d \-]{6,}\d""")
-
-    /**
-     * Removes private bits the user may type: UPI ids / e-mails, long numbers (phone, account, reference: 9+ digits)
-     * and the names of people saved in Lending (replaced with "a friend").
-     */
-    fun scrub(text: String, peopleNames: List<String>): String {
-        var s = ID.replace(text, "[id]")
-        s = LONG_NUMBER.replace(s) { if (it.value.count { c -> c.isDigit() } >= 9) "[number]" else it.value }
-        val tokens = peopleNames.flatMap { n -> listOf(n.trim()) + n.trim().split(Regex("\\s+")) }
-            .map { it.trim() }.filter { it.length >= 3 && it.any { c -> c.isLetter() } }
-            .distinct().sortedByDescending { it.length }
-        for (t in tokens) {
-            s = Regex("(?i)(?<![\\p{L}\\p{N}])" + Regex.escape(t) + "(?![\\p{L}\\p{N}])").replace(s, "a friend")
-        }
-        return s
-    }
 
     /** Category names the AI may mention (for tests / server checks). */
     val CATEGORY_NAMES: List<String> = Category.entries.map { it.displayName }

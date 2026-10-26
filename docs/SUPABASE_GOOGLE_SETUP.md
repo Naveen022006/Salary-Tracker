@@ -154,6 +154,26 @@ If something is wrong, the app says so in the chat:
 - "You have used today's 30 AI questions": the daily limit; it resets at midnight (India time).
 - Any other error: Supabase -> Edge Functions -> assistant -> **Logs**.
 
+## J. Ask becomes an agent (app 1.7)
+
+From app 1.7 the AI in the Ask tab is an assistant that can look up your entries and prepare changes (add an
+expense, change entries, set a limit or the savings goal) that you confirm in the app. It needs two updates in
+Supabase. Do step I first if you have not.
+
+1. **Database**: Supabase -> SQL Editor -> paste `supabase/migrations/0005_agent.sql` -> **Run**. One question can
+   now take a few AI calls (look something up, then answer). The question still counts once against the 30 a day;
+   the extra calls have their own limit (30 a minute, 200 a day per user).
+2. **Function**: Supabase -> **Edge Functions -> assistant -> Code**. Replace all of it with the new
+   `supabase/functions/assistant/index.ts` and click **Deploy**. Keep **Verify JWT** on.
+3. **App**: open Ask and type a question. The app shows the new privacy note once; tap **Turn on**.
+
+Try: "What did I spend at Swiggy this week?", "Compare this week with last week", "I spent 200 on tea" (a card
+appears; tap Confirm), "Mark my Amazon payment as not spending", "I am saving for a bike" (Ask remembers it; see
+Ask -> ⚙ -> What Ask remembers).
+
+If the app says "The assistant function in Supabase is older than this app", step 2 is not done. If it says
+"AI needs a database update", step 1 is not done. A question costs about ₹0.10 (two or three AI calls).
+
 ## H. Your data
 
 Stored in the cloud (your own Supabase project, protected by row level security so each user sees only their own rows):
@@ -164,9 +184,11 @@ Stored in the cloud (your own Supabase project, protected by row level security 
 - Lending (needs 0003): people (name, optional phone, note) and lending entries (who, gave / got back / borrowed / paid back, amount, cash / UPI / bank / card / other, payment app name such as GPay, date, optional return-by date, note).
 - Your Google account id and email (kept by Supabase Auth).
 
-**Ask tab:** the chat and the category limits stay on the phone. With AI answers on, each AI question sends your
-question and a summary of numbers to the `assistant` function, which passes them to Anthropic (not stored in your
-database). Stored in the database only: a count of AI questions and tokens per day (`private.ai_usage`).
+**Ask tab:** the chat, the category limits and what Ask remembers stay on the phone. With the AI assistant on, each
+typed question sends your question, a summary of numbers and the entries it looks up (date, amount, category, shop
+name, your note; people's names replaced by codes) to the `assistant` function, which passes them to Anthropic (not
+stored in your database). Stored in the database only: counts of AI questions, steps and tokens per day
+(`private.ai_usage`).
 
 **Never uploaded:** the original SMS text and notification text. Only the hash, which cannot be turned back into text.
 

@@ -173,6 +173,27 @@ fun TodayScreen(vm: AppViewModel, padding: PaddingValues, listState: LazyListSta
         item(key = "last7") {
             GroupedSection(Modifier.padding(horizontal = 16.dp), header = "Last 7 days") {
                 Column(Modifier.padding(16.dp)) {
+                  if (state.last7.all { it.spendPaise <= 0L }) {
+                    // Nothing to draw: a short message instead of an empty chart with one dashed line.
+                    Column(
+                        Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text(
+                            "No spending in the last 7 days",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = AppColors.current.label,
+                            textAlign = TextAlign.Center,
+                        )
+                        Text(
+                            "Your daily budget is ${Money.formatWhole(snap.baseDailyPaise)}.",
+                            style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
+                            color = AppColors.current.secondaryLabel,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                  } else {
                     Last7DaysChart(state.last7, allowance)
                     if (allowance > 0) {
                         Spacer(Modifier.height(8.dp))
@@ -182,6 +203,7 @@ fun TodayScreen(vm: AppViewModel, padding: PaddingValues, listState: LazyListSta
                             color = AppColors.current.secondaryLabel,
                         )
                     }
+                  }
                 }
             }
         }

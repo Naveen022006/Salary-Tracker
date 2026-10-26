@@ -196,10 +196,7 @@ private fun PersonForm(vm: AppViewModel, existing: PersonEntity?) {
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
             style = MaterialTheme.typography.titleLarge,
         )
-        Column(
-            Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        SheetScrollBody(spacing = 12.dp) {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it.take(LoanMath.NAME_MAX) },
@@ -244,7 +241,6 @@ private fun PersonForm(vm: AppViewModel, existing: PersonEntity?) {
                 maxLines = 3,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(Modifier.height(8.dp))
         }
         SaveBar(enabled = name.isNotBlank(), onSave = { save() })
     }
@@ -378,10 +374,7 @@ private fun LoanForm(vm: AppViewModel, req: LoanSheetRequest) {
                 }
             }
         }
-        Column(
-            Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
+        SheetScrollBody(spacing = 16.dp) {
             // Kind switch (2 x 2 so it fits big text sizes)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (pair in LoanKind.entries.chunked(2)) {
@@ -466,7 +459,6 @@ private fun LoanForm(vm: AppViewModel, req: LoanSheetRequest) {
                 maxLines = 3,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(Modifier.height(8.dp))
         }
         SaveBar(enabled = paise != null, onSave = { save() })
     }

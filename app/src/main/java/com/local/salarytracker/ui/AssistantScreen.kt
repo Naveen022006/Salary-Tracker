@@ -530,7 +530,7 @@ private fun InputBar(enabled: Boolean, aiOn: Boolean, onSend: (String) -> Unit) 
                 }
             },
             modifier = Modifier.weight(1f),
-            placeholder = { Text(if (aiOn) "Ask anything about your money" else "Ask about your money", maxLines = 1) },
+            placeholder = { Text("Ask about your money", maxLines = 1, overflow = TextOverflow.Ellipsis) },
             supportingText = if (text.length > 400) {
                 { Text("${text.length} / 500", style = MaterialTheme.typography.bodySmall) }
             } else null,

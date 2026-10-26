@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.clickable
@@ -49,6 +50,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -249,9 +252,12 @@ private fun HeroColumn(label: String, paise: Long, color: Color, caption: String
 private fun PersonRow(b: PersonBalance, vm: AppViewModel, today: LocalDate, onClick: () -> Unit) {
     val colors = AppColors.current
     val p = b.person
+    // The balance pill can take most of the width: if the long caption does not fit, show just "Last: 24 Oct".
+    var shortCaption by remember(b.person.remoteId) { mutableStateOf(false) }
     val caption = if (b.entryCount > 0) {
         val last = Instant.ofEpochMilli(b.lastActivityAt).atZone(vm.zone).toLocalDate()
-        "Last: ${smartDate(last, today)} · ${b.entryCount} ${if (b.entryCount == 1) "entry" else "entries"}"
+        if (shortCaption) "Last: ${smartDate(last, today)}"
+        else "Last: ${smartDate(last, today)} · ${b.entryCount} ${if (b.entryCount == 1) "entry" else "entries"}"
     } else {
         p.phone?.takeIf { it.isNotBlank() } ?: "No entries yet"
     }
@@ -264,10 +270,17 @@ private fun PersonRow(b: PersonBalance, vm: AppViewModel, today: LocalDate, onCl
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(p.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(caption, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                caption,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { if (it.hasVisualOverflow && b.entryCount > 0) shortCaption = true },
+            )
         }
         Spacer(Modifier.width(8.dp))
-        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.widthIn(max = 170.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             when {
                 b.balancePaise > 0 -> TintPill("Owes you ${Money.format(b.balancePaise)}", colors.positiveFill)
                 b.balancePaise < 0 -> TintPill("You owe ${Money.format(-b.balancePaise)}", colors.dangerFill)

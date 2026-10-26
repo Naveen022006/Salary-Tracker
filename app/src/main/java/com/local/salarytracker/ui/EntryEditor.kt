@@ -26,6 +26,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -164,7 +167,8 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
     val zone: ZoneId = vm.zone
     val isNew = original == null
     var amountText by rememberDraft(vm, "entry.amount", original?.let { Money.toInput(it.amountPaise) } ?: "")
-    var category by rememberDraftOf(vm, "entry.cat", original?.category ?: Category.OTHER, { it.name }, { runCatching { Category.valueOf(it) }.getOrNull() })
+    // Adding: nothing is picked at first (null) and Save waits for a category. Editing: the current one is selected.
+    var category by rememberDraftOf<Category?>(vm, "entry.cat", original?.category, { it?.name ?: "" }, { runCatching { Category.valueOf(it) }.getOrNull() })
     var excluded by rememberDraftBool(vm, "entry.excl", original?.excluded ?: false)
     var text by rememberDraft(vm, "entry.text", original?.merchant ?: original?.note ?: "")
     // Own category name ("" = a built-in one) and "what it was for" (asked for Other; kept as the note).
@@ -175,6 +179,7 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
     val hidden = vm.hiddenCategories.collectAsStateWithLifecycle().value
     val isOther = !excluded && category == Category.OTHER && customCat.isEmpty()
     val needsDetails = isOther && (text.isBlank() || use.isBlank())
+    val needsCategory = !excluded && category == null && customCat.isEmpty()
     val initial = remember {
         original?.let { Instant.ofEpochMilli(it.timestamp).atZone(zone).toLocalDateTime() } ?: java.time.LocalDateTime.now()
     }
@@ -203,9 +208,9 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
 
     fun save() {
         val amount = paise ?: return
-        if (needsDetails) return
+        if (needsDetails || needsCategory) return
         val name = text.trim().takeIf { it.isNotEmpty() }
-        val cat = if (excluded) Category.TRANSFER else category
+        val cat = if (excluded) Category.TRANSFER else (category ?: Category.OTHER)
         val own = customCat.takeIf { it.isNotEmpty() && !excluded }
         val useText = use.trim().takeIf { it.isNotEmpty() }
         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -247,10 +252,7 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
             }
         }
 
-        Column(
-            Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
+        SheetScrollBody(spacing = 16.dp) {
             // Amount
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 BasicTextField(
@@ -394,7 +396,7 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
                     role = Role.Switch,
                     onValueChange = {
                         excluded = it
-                        if (it) { category = Category.TRANSFER; customCat = "" } else if (category == Category.TRANSFER) category = Category.OTHER
+                        if (it) { category = Category.TRANSFER; customCat = "" } else if (category == Category.TRANSFER) category = if (isNew) null else Category.OTHER
                     },
                 ),
                 verticalAlignment = Alignment.CenterVertically,
@@ -451,16 +453,20 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
                     }
                 }
             }
-            Spacer(Modifier.height(8.dp))
         }
 
         // Sticky save bar
         Surface(color = sheetBackground()) {
             Column(Modifier.navigationBarsPadding()) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                if (paise != null && needsDetails) {
+                val hint = when {
+                    needsCategory -> "Pick a category"
+                    paise != null && needsDetails -> "Add what it is and what it was for, then save."
+                    else -> null
+                }
+                if (hint != null) {
                     Text(
-                        "Add what it is and what it was for, then save.",
+                        hint,
                         modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 10.dp),
                         style = MaterialTheme.typography.bodySmall,
                         color = AppColors.current.secondaryLabel,
@@ -469,7 +475,7 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
                 }
                 Button(
                     onClick = { save() },
-                    enabled = paise != null && !needsDetails,
+                    enabled = paise != null && !needsDetails && !needsCategory,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp).defaultMinSize(minHeight = 56.dp),
                 ) { Text("Save", style = MaterialTheme.typography.titleMedium) }
             }
@@ -516,6 +522,27 @@ private fun EditorForm(vm: AppViewModel, original: TxnEntity?) {
         )
     }
 }
+
+/**
+ * The scrolling part of a bottom sheet (above the sticky Save bar). It has extra bottom padding so the last item can
+ * scroll fully clear of the bar, and a short fade at its lower edge so content passing under the bar looks deliberate.
+ */
+@Composable
+internal fun ColumnScope.SheetScrollBody(spacing: Dp, content: @Composable ColumnScope.() -> Unit) {
+    Box(Modifier.weight(1f, fill = false)) {
+        Column(
+            Modifier.verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = SheetFade + 8.dp),
+            verticalArrangement = Arrangement.spacedBy(spacing),
+            content = content,
+        )
+        Box(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(SheetFade)
+                .background(Brush.verticalGradient(listOf(Color.Transparent, sheetBackground()))),
+        )
+    }
+}
+
+private val SheetFade = 24.dp
 
 private class TileSpec(val label: String, val selected: Boolean, val icon: @Composable () -> Unit, val onClick: () -> Unit)
 
